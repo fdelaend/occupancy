@@ -10,6 +10,8 @@ data <- expand_grid(n = 6, meanA = c(0, 0.2, 0.4, 0.8),
     matrix(data = rnorm(n^2, meanA, sdA), ncol = n))) %>% 
   mutate(A = map(A, ~make_symmetric(.x))) %>% #make symmetric and ditch diagonal
   mutate(A = map(A, ~ set_diagonal(A=.x, d=1))) %>% #set self to 1
+  #compute feasibility
+  mutate(feasibility = map_dbl(A, ~feasibility(.x))) %>%
   mutate(A = pmap(., make_block_diagonal)) %>% #make A spatial
   mutate(R = pmap(., make_R_spatial)) %>% #make spatial R (note that the emigration is subtracted later so this is the real local R)
   mutate(D = pmap(., make_D)) %>% #make dispersal matrix
