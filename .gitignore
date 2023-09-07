@@ -1,3 +1,8 @@
+
+# Folders to ignore
+/figures/*.*
+/mathematica/*.*
+
 # History files
 .Rhistory
 .Rapp.history
