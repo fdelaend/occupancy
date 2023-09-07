@@ -1,8 +1,8 @@
 extinctionThreshold <- 1e-3
 
 # CALCULATIONS ------
-data <- expand_grid(n = 6, meanA = c(0, 0.2, 0.4, 0.8), 
-                    d = seq(-6,-4, length.out=4),
+data <- expand_grid(n = c(3, 6), meanA = c(0, 0.2, 0.4, 0.8), 
+                    d = seq(-6,-4, length.out=6),
                     sdA = 0, p = 50, rep = c(1:3)) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
   #Make parameters
   mutate(d = 10^d) %>%
@@ -54,30 +54,15 @@ data <- expand_grid(n = 6, meanA = c(0, 0.2, 0.4, 0.8),
 # PLOTS ------
 ggplot(data) + 
   scale_color_gradient(low = "yellow", high = "red") +
+  scale_linetype_discrete(rep("solid", 100))+
   theme_bw() +
   aes(x=log10(d), y=propFeas, col=meanA) + 
   geom_point() +
   labs(x=expression(paste("log"[10],"(d)")), 
-       y="Patch occupancy (fraction)", col="a")
-# There is a region of d where it has a strong influence on patch occupancy
-# while it does not yet influence total density.
-
-data_with_prediction <- data %>%
-  ungroup() %>%
-  mutate(propFeas_pred = (2*(-atan(meanA/1) + atan(1/meanA))/pi)) %>%
-  mutate(a = meanA) %>%
-  unite("it", rep, a)
-
-ggplot(data_with_prediction) + 
-  theme_bw() +
-  scale_color_gradient(low = "yellow", high = "red") +
-  scale_linetype_manual(values=rep("solid", 1000)) + 
-  aes(x=log10(d), y=propFeas, col=meanA) + 
-  geom_jitter(height = 0, width = 0.1) +
-  geom_line(aes(x=log10(d), y=propFeas_pred, col=meanA, lty=it),
-            show.legend = F) +
-  labs(x=expression(paste("log"[10],"(d)")), 
-       y="Patch occupancy (fraction)", col="a")
+       y="Patch occupancy (fraction)", col="a") +
+  geom_line(aes(x=log10(d), y=feasibility, col=meanA,
+                group=interaction(meanA, rep))) + 
+  facet_grid(cols=vars(n))
 
 ggsave(paste0("../figures/feas.pdf"), width=4, height = 3, 
        device = "pdf")
