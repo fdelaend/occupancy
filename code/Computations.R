@@ -65,7 +65,7 @@ ggplot(data) +
                 group=interaction(meanA, rep))) + 
   facet_grid(cols=vars(n))
 
-ggsave(paste0("../figures/feas.pdf"), width=4, height = 3, 
+ggsave(paste0("../figures/feas.pdf"), width=5, height = 2, 
        device = "pdf")
 
 ## total biomass ----
@@ -75,8 +75,13 @@ ggplot(data %>%
   theme_bw() +
   scale_color_gradient(low = "yellow", high = "red") +
   aes(x=log10(d), y=NTot, col=meanA) + 
+  labs(x=expression(paste("log"[10],"(d)")), 
+       y="total biomass \n across network", col="a") +
   geom_point() + 
   facet_grid(cols=vars(n))
+
+ggsave(paste0("../figures/biomass.pdf"), width=5, height = 2, 
+       device = "pdf")
 
 ## Does a well-mixed system behave as a single system?
 # No
