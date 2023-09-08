@@ -52,9 +52,10 @@ data <- expand_grid(n = c(3, 6), meanA = c(0, 0.2, 0.4, 0.8),
                        summarize(XMean=mean(X^2))))
 
 # PLOTS ------
+## main plot ----
 ggplot(data) + 
   scale_color_gradient(low = "yellow", high = "red") +
-  scale_linetype_discrete(rep("solid", 100))+
+  scale_linetype_discrete(rep("solid", 100)) +
   theme_bw() +
   aes(x=log10(d), y=propFeas, col=meanA) + 
   geom_point() +
@@ -67,30 +68,22 @@ ggplot(data) +
 ggsave(paste0("../figures/feas.pdf"), width=4, height = 3, 
        device = "pdf")
 
+## total biomass ----
+ggplot(data %>% 
+         mutate(NTotPred = p*get_N_total(mean_a=meanA, d=1, l=n, r=1))) + 
+  scale_linetype_discrete(rep("solid", 100)) +
+  theme_bw() +
+  scale_color_gradient(low = "yellow", high = "red") +
+  aes(x=log10(d), y=NTot, col=meanA) + 
+  geom_point() + 
+  facet_grid(cols=vars(n))
+
 ## Does a well-mixed system behave as a single system?
 # No
 # But switching off dispersal gives same pattern,
 # so probably only due to the fact that we have many patches, 
 # some of which contain both, others only 1, still others only 2. 
-ggplot(data %>% filter(d==10^-6)) + 
-  scale_color_gradient(low = "yellow", high = "red") +
-  theme_bw() +
-  aes(x=`1`, y=`1single`, col=meanA) + 
-  geom_point() + 
-  labs(x="total density sp 1 across network", 
-       y="density of sp 1 in one mean system") + 
-  geom_abline(slope = 1, intercept = 0)
 
-## Do patches with two species contain more density than pathces with one?
-density_per_patch <- data %>%
-  select(all_of(c("n", "meanA", "d", "totalPerSite"))) %>%
-  unnest(totalPerSite)
-
-ggplot(density_per_patch) + 
-  scale_color_gradient(low = "yellow", high = "red") +
-  theme_bw() +
-  aes(x=nrSp, y=NTotal_loc, col=meanA) +
-  geom_point()
   
 ## Can we predict the total density across the whole network 
 ## with a model that acts as if all were a single system with summed Rs as the R?
@@ -116,3 +109,23 @@ ggplot(data) +
   mutate(NsingleTotal = map_dbl(Nsingle, ~ ifelse(prod(.x>0), sum(.x), NA))) %>%
   #just pick one species 
   mutate(`1single` = map_dbl(Nsingle, ~ifelse(prod(.x>0), .x[1], NA)))
+
+ggplot(data %>% filter(d==10^-6)) + 
+  scale_color_gradient(low = "yellow", high = "red") +
+  theme_bw() +
+  aes(x=`1`, y=`1single`, col=meanA) + 
+  geom_point() + 
+  labs(x="total density sp 1 across network", 
+       y="density of sp 1 in one mean system") + 
+  geom_abline(slope = 1, intercept = 0)
+
+## Do patches with two species contain more density than pathces with one?
+density_per_patch <- data %>%
+  select(all_of(c("n", "meanA", "d", "totalPerSite"))) %>%
+  unnest(totalPerSite)
+
+ggplot(density_per_patch) + 
+  scale_color_gradient(low = "yellow", high = "red") +
+  theme_bw() +
+  aes(x=nrSp, y=NTotal_loc, col=meanA) +
+  geom_point()

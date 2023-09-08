@@ -120,6 +120,11 @@ get_NHat <- function(n, R, A, D, max_time=100, N0, ...){
                          sp=rep(c(1:n), p)))) 
 }
 
+## Others ------
+get_N_total <- function(mean_a=0.2, d=1, l=10, r=1){ #a=comp.strength; d=self limit.
+  l*r/(d+mean_a*(l-1))
+}
+
 
 
 
