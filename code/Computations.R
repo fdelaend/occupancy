@@ -1,7 +1,7 @@
 extinctionThreshold <- 1e-3
 
 # CALCULATIONS ------
-data <- expand_grid(n = c(3, 6), meanA = c(0, 0.2, 0.4, 0.8), 
+data <- expand_grid(n = c(2, 4, 6), meanA = c(0, 0.2, 0.4, 0.8), 
                     d = seq(-6,-4, length.out=6),
                     sdA = 0, p = 50, rep = c(1:3)) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
   #Make parameters
@@ -65,7 +65,7 @@ ggplot(data) +
                 group=interaction(meanA, rep))) + 
   facet_grid(cols=vars(n))
 
-ggsave(paste0("../figures/feas.pdf"), width=5, height = 2, 
+ggsave(paste0("../figures/feas.pdf"), width=6, height = 2, 
        device = "pdf")
 
 ## total biomass ----
