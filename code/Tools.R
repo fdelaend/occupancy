@@ -134,11 +134,16 @@ get_fraction_m <- function(meanA=0, m=1, n=3, ...){
   #fraction when m =n
   fraction <- feasibility(A)
   #fraction when m <n (with m-1>0, so m>1)
-  if (m<n){
-  fractionMinus1 <- ifelse(m>1, feasibility(as.matrix(A[c(1:(m-1)),c(1:(m-1))])), 1)
-  fractionPlus1  <- feasibility(as.matrix(A[c(1:(m+1)),c(1:(m+1))])) 
+  bigSum <- 0
+  if (m<n){ 
+    for (j in c((m+1):n))
+    {
+      bigSum <- bigSum + feasibility(as.matrix(A[c(1:j),c(1:j)]))
+    }
+  #fractionMinus1 <- ifelse(m>1, feasibility(as.matrix(A[c(1:(m-1)),c(1:(m-1))])), 1)
+  #fractionPlus1  <- feasibility(as.matrix(A[c(1:(m+1)),c(1:(m+1))])) 
   }
-  (m==n)*fraction + (m<n)*(fractionMinus1-fractionPlus1)
+  (m==n)*fraction + (m<n)*(fraction-bigSum)
 }
 
 
