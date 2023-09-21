@@ -1,8 +1,8 @@
 extinctionThreshold <- 1e-3
 
 # CALCULATIONS ------
-data <- expand_grid(n = c(2, 4, 6), meanA = c(0, 0.2, 0.4, 0.8), 
-                    d = seq(-6,-4, length.out=6),
+data <- expand_grid(n = c(2, 4), meanA = c(0, 0.2, 0.4, 0.8), #, 6
+                    d = seq(-8,-4, length.out=3), #6
                     sdA = 0, p = 50, rep = c(1:3)) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
   #Make parameters
   mutate(d = 10^d) %>%
@@ -10,8 +10,7 @@ data <- expand_grid(n = c(2, 4, 6), meanA = c(0, 0.2, 0.4, 0.8),
     matrix(data = rnorm(n^2, meanA, sdA), ncol = n))) %>% 
   mutate(A = map(A, ~make_symmetric(.x))) %>% #make symmetric and ditch diagonal
   mutate(A = map(A, ~ set_diagonal(A=.x, d=1))) %>% #set self to 1
-  #compute feasibility
-  mutate(feasibility = map_dbl(A, ~feasibility(.x))) %>%
+  mutate(feasibility = map_dbl(A, ~feasibility(.x))) %>% #compute feasibility
   mutate(A = pmap(., make_block_diagonal)) %>% #make A spatial
   mutate(R = pmap(., make_R_spatial)) %>% #make spatial R (note that the emigration is subtracted later so this is the real local R)
   mutate(D = pmap(., make_D)) %>% #make dispersal matrix
@@ -23,13 +22,17 @@ data <- expand_grid(n = c(2, 4, 6), meanA = c(0, 0.2, 0.4, 0.8),
   #Analyse: 
   #0/cv of R within a patch
   mutate(cvR = map(NHat, ~ .x %>% group_by(location) %>% summarize(cvR = sd(R)/mean(R)))) %>%
-  #1/nr of feasible patches (aka where all present)
-  mutate(nrFeas = pmap_dbl(., function(NHat, n,...) {
+  #1/nr of patches where a subset m<= n persists
+  mutate(nrPatchesM = pmap(., function(NHat, n,...) {
     NHat %>% mutate(present = density>extinctionThreshold) %>%
       group_by(location) %>%
-      summarize(nrSp = sum(present)) %>%
-      filter(nrSp==n) %>% nrow()})) %>%
-  mutate(propFeas = nrFeas/p) %>%
+      summarize(m = as_factor(sum(present))) %>%
+      mutate(m = fct_expand(m, as.character(c(1:n)))) %>%
+      group_by(m) %>%
+      count(m, .drop=F, name="nrPatches")})) %>%
+  #1.1/nr of patches in which all n species persist
+  mutate(nrPatchesN = map2_dbl(nrPatchesM, n, ~ (.x %>% filter(m==.y))$nrPatches)) %>%
+  mutate(propPatchesN = nrPatchesN/p) %>%
   #2/total density across all patches and species
   mutate(NTot = map_dbl(NHat, ~ sum(.x["density"]))) %>%#total density across all patches
   #3/mean density of each species across all patches  
@@ -57,7 +60,7 @@ ggplot(data) +
   scale_color_gradient(low = "yellow", high = "red") +
   scale_linetype_discrete(rep("solid", 100)) +
   theme_bw() +
-  aes(x=log10(d), y=propFeas, col=meanA) + 
+  aes(x=log10(d), y=propPatchesN, col=meanA) + 
   geom_point() +
   labs(x=expression(paste("log"[10],"(d)")), 
        y="Patch occupancy (fraction)", col="a") +
@@ -83,6 +86,24 @@ ggplot(data %>%
 ggsave(paste0("../figures/biomass.pdf"), width=5, height = 2, 
        device = "pdf")
 
+## the number of patches occupying m<=n species in case there is no dispersal:
+dataNoDisp <- data %>%
+  select(n, meanA, d, p, rep, nrPatchesM) %>%
+  filter(d==min(d)) %>%
+  unnest(nrPatchesM) %>%
+  mutate(m=as.numeric(as.character(m))) %>%
+  mutate(fractionPatches = nrPatches/p) %>%
+  mutate(fractionPatchesPredicted = pmap_dbl(., get_fraction_m)) 
+  
+ggplot(dataNoDisp) + 
+  theme_bw() +
+  scale_color_gradient(low = "yellow", high = "red") +
+  aes(x=m, y=fractionPatches, 
+      col=meanA) + 
+  geom_point() + 
+  facet_grid(cols=vars(n)) #+ 
+  #geom_abline(slope=1, intercept = 0)
+
 ## Does a well-mixed system behave as a single system?
 # No
 # But switching off dispersal gives same pattern,
@@ -101,36 +122,3 @@ ggplot(data) +
 #No!
 
 # LEFTOVERS ---------
-  #5/model equilibrium as if all were a single system with summed Rs as the R
-  mutate(Rsingle = pmap(., function(R, n, p,...) {
-    tibble(R) %>% 
-      mutate(sp = rep(c(1:n), p)) %>%
-      group_by(sp) %>%
-      summarize(R = sum(R)) %>% #total across whole network
-      select(R) %>%
-      as_vector()})) %>%
-  mutate(Nsingle = map2(meanA, Rsingle, ~ solve(diag(length(.y))+.x-diag(length(.y))*.x)%*%.y)) %>%
-  #get total density as such obtained
-  mutate(NsingleTotal = map_dbl(Nsingle, ~ ifelse(prod(.x>0), sum(.x), NA))) %>%
-  #just pick one species 
-  mutate(`1single` = map_dbl(Nsingle, ~ifelse(prod(.x>0), .x[1], NA)))
-
-ggplot(data %>% filter(d==10^-6)) + 
-  scale_color_gradient(low = "yellow", high = "red") +
-  theme_bw() +
-  aes(x=`1`, y=`1single`, col=meanA) + 
-  geom_point() + 
-  labs(x="total density sp 1 across network", 
-       y="density of sp 1 in one mean system") + 
-  geom_abline(slope = 1, intercept = 0)
-
-## Do patches with two species contain more density than pathces with one?
-density_per_patch <- data %>%
-  select(all_of(c("n", "meanA", "d", "totalPerSite"))) %>%
-  unnest(totalPerSite)
-
-ggplot(density_per_patch) + 
-  scale_color_gradient(low = "yellow", high = "red") +
-  theme_bw() +
-  aes(x=nrSp, y=NTotal_loc, col=meanA) +
-  geom_point()
