@@ -98,7 +98,7 @@ dataNoDisp <- data %>%
 ggplot(dataNoDisp) + 
   theme_bw() +
   scale_color_gradient(low = "yellow", high = "red") +
-  aes(x=m, y=fractionPatches, 
+  aes(x=m, y=fractionPatchesPredicted, 
       col=meanA) + 
   geom_point() + 
   facet_grid(cols=vars(n)) #+ 

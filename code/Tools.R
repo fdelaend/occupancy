@@ -126,25 +126,14 @@ get_N_total <- function(mean_a=0.2, d=1, l=10, r=1){ #a=comp.strength; d=self li
 }
 
 #compute fraction of patches with m species in a metacommunity of n species
-#without dispersal.
-get_fraction_m <- function(meanA=0, m=1, n=3, ...){
+#without dispersal. For m>1
+get_fraction_m <- function(meanA=0, m=2, n=3, ...){
   #n x n matrix
   A   <- diag(n) + meanA
   A   <- set_diagonal(A, 1)
-  #fraction when m =n
-  fraction <- feasibility(A)
-  #fraction when m <n (with m-1>0, so m>1)
-  bigSum <- 0
-  if (m<n){ 
-    for (j in c((m+1):n))
-    {
-      bigSum <- bigSum + feasibility(as.matrix(A[c(1:j),c(1:j)]))
-    }
-  #fractionMinus1 <- ifelse(m>1, feasibility(as.matrix(A[c(1:(m-1)),c(1:(m-1))])), 1)
-  #fractionPlus1  <- feasibility(as.matrix(A[c(1:(m+1)),c(1:(m+1))])) 
+  ifelse(m<n, choose(n, m) * (feasibility(as.matrix(A[c(1:m),c(1:m)])) - 
+                                  feasibility(as.matrix(A[c(1:(m+1)),c(1:(m+1))]))), feasibility(A))
   }
-  (m==n)*fraction + (m<n)*(fraction-bigSum)
-}
 
 
 
