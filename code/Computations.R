@@ -1,9 +1,8 @@
-extinctionThreshold <- 1e-3
 
 # CALCULATIONS ------
-data <- expand_grid(n = c(2, 4), meanA = c(0, 0.2, 0.4, 0.8), #, 6
+data <- expand_grid(n = c(3, 4), meanA = c(0, 0.4, 0.8), #, 6
                     d = seq(-8,-4, length.out=3), #6
-                    sdA = 0, p = 50, rep = c(1:3)) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
+                    sdA = 0, p = 100, rep = c(1:3)) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
   #Make parameters
   mutate(d = 10^d) %>%
   mutate(A = pmap(., function(meanA, sdA, n, ...) 
