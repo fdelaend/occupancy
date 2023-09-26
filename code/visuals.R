@@ -38,4 +38,4 @@ names(colr) <- coms
 s3d <- scatterplot3d::scatterplot3d(x=dataNoDisp$R_1, y=dataNoDisp$R_2, 
                                     z=dataNoDisp$R_3, color=colr[dataNoDisp$community], 
                                     type = "p", pch = 10, cex.symbols=2,
-                                    box = F, angle = 70, scale.y=1)
+                                    box = F, angle = 1, scale.y=0.11)

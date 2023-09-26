@@ -1,6 +1,6 @@
 
 # CALCULATIONS ------
-data <- expand_grid(n = c(3, 4), meanA = c(0, 0.4, 0.8), #, 6
+data <- expand_grid(n = c(3), meanA = c(0, 0.4, 0.8), #, 6
                     d = seq(-8,-4, length.out=3), #6
                     sdA = 0, p = 100, rep = c(1:3)) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
   #Make parameters
@@ -87,12 +87,14 @@ ggsave(paste0("../figures/biomass.pdf"), width=5, height = 2,
 
 ## the number of patches occupying m<=n species in case there is no dispersal:
 dataNoDisp <- data %>%
-  select(n, meanA, d, p, rep, nrPatchesM) %>%
+  select(n, A, meanA, d, p, rep, nrPatchesM) %>%
   filter(d==min(d)) %>%
   unnest(nrPatchesM) %>%
   mutate(m=as.numeric(as.character(m))) %>%
   mutate(fractionPatches = nrPatches/p) %>%
-  mutate(fractionPatchesPredicted = pmap_dbl(., get_fraction_m)) 
+  mutate(fractionPatchesPredictedOne = 
+           map2_dbl(A, n, ~(1-feasibility(.x[c(1:2),c(1:2)]))^(.y-1))) %>%
+  filter(m==1)
   
 ggplot(dataNoDisp) + 
   theme_bw() +
