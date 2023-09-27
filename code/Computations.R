@@ -1,6 +1,6 @@
 
 # CALCULATIONS ------
-data <- expand_grid(n = c(3), meanA = c(0, 0.4, 0.8), #, 6
+data <- expand_grid(n = c(3, 4), meanA = c(0, 0.2, 0.4, 0.8), #, 6
                     d = seq(-8,-4, length.out=3), #6
                     sdA = 0, p = 100, rep = c(1:3)) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
   #Make parameters
@@ -92,14 +92,19 @@ dataNoDisp <- data %>%
   unnest(nrPatchesM) %>%
   mutate(m=as.numeric(as.character(m))) %>%
   mutate(fractionPatches = nrPatches/p) %>%
-  mutate(fractionPatchesPredictedOne = 
-           map2_dbl(A, n, ~(1-feasibility(.x[c(1:2),c(1:2)]))^(.y-1))) %>%
-  filter(m==1)
-  
+  mutate(fractionPatchesTest = map_dbl(A, ~(feasibility(.x[c(1,2), c(1,2)]))^3))
+
+ggplot(dataNoDisp %>% filter(m==2)) + 
+  theme_bw() +
+  scale_color_gradient(low = "yellow", high = "red") +
+  aes(x=fractionPatches, y=fractionPatchesTest, col=meanA) + 
+  geom_point() + 
+  geom_abline(slope=1, intercept = 0)
+
 ggplot(dataNoDisp) + 
   theme_bw() +
   scale_color_gradient(low = "yellow", high = "red") +
-  aes(x=m, y=fractionPatchesPredicted, 
+  aes(x=m, y=fractionPatches, 
       col=meanA) + 
   geom_point() + 
   facet_grid(cols=vars(n)) #+ 
