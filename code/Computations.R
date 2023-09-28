@@ -1,6 +1,6 @@
 
 # CALCULATIONS ------
-data <- expand_grid(n = c(3, 4), meanA = c(0, 0.2, 0.4, 0.8), #, 6
+data <- expand_grid(n = c(3, 4, 6), meanA = c(0, 0.2, 0.4, 0.8), #, 6
                     d = seq(-8,-4, length.out=3), #6
                     sdA = 0, p = 100, rep = c(1:3)) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
   #Make parameters
@@ -88,25 +88,27 @@ ggsave(paste0("../figures/biomass.pdf"), width=5, height = 2,
 ## the number of patches occupying m<=n species in case there is no dispersal:
 dataNoDisp <- data %>%
   select(n, A, meanA, d, p, rep, nrPatchesM) %>%
-  filter(d==min(d)) %>%
+  filter(d==min(d), meanA>0) %>%
   unnest(nrPatchesM) %>%
   mutate(m=as.numeric(as.character(m))) %>%
   mutate(fractionPatches = nrPatches/p) %>%
-  mutate(fractionPatchesTest = map_dbl(A, ~(feasibility(.x[c(1,2), c(1,2)]))^3))
+  mutate(fractionPatchesTest = pmap_dbl(., get_fraction_m))
 
-ggplot(dataNoDisp %>% filter(m==2)) + 
+ggplot(dataNoDisp) + 
   theme_bw() +
   scale_color_gradient(low = "yellow", high = "red") +
   aes(x=fractionPatches, y=fractionPatchesTest, col=meanA) + 
   geom_point() + 
   geom_abline(slope=1, intercept = 0)
 
-ggplot(dataNoDisp) + 
+ggplot(dataNoDisp %>% mutate(meanA2 = meanA) %>%
+         unite("it", rep, meanA2)) + 
   theme_bw() +
+  scale_linetype_manual(values=rep("solid", 1000)) + 
   scale_color_gradient(low = "yellow", high = "red") +
-  aes(x=m, y=fractionPatches, 
-      col=meanA) + 
-  geom_point() + 
+  geom_point(aes(x=m, y=fractionPatches, col=meanA), alpha=0.5) + 
+  aes(x=m, y=fractionPatchesTest, col=meanA, lty=as_factor(it)) + #,,  
+  geom_line(show.legend = F) + 
   facet_grid(cols=vars(n)) #+ 
   #geom_abline(slope=1, intercept = 0)
 
