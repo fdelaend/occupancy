@@ -4,6 +4,7 @@ library(tidyverse)
 library(igraph)
 library(pracma)
 library(gridExtra)
+library(feasoverlap)
 library(reticulate) #to run python code from R
 use_python("/usr/local/bin/python3.10") #load your preferred python version
 source_python("MVN.py")
