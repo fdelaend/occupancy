@@ -39,11 +39,12 @@ data <- expand_grid(n = c(3, 4, 6), meanA = c(0, 0.2, 0.4, 0.8), #, 6
     NHat %>% 
       group_by(sp) %>%
       summarize(meanNAcross = mean(density))})) %>%
-  #4/mean density at each site, across all species
+  #4/mean density at each site (and mean of inverse density), across all species
   mutate(meanWithin = pmap(., function(NHat,...) {
     NHat %>% 
       group_by(location) %>%
-      summarize(meanNWithin = mean(density))})) %>%
+      summarize(meanNWithin = mean(density),
+                meanNWithinInv = mean(1/density))})) %>%
   #5/total of local interactions experienced by every species: R - AN, 
   # after having set diag(A) to zero (because we only want interactions with heterospecifics)
   mutate(ANoti = map(A, ~ set_diagonal(A=.x, d=0))) %>% #set self to 0

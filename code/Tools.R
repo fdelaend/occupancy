@@ -123,8 +123,8 @@ get_NHat <- function(n, R, A, D, max_time=100, N0, ...){
 }
 
 ## Others ------
-get_N_total <- function(mean_a=0.2, d=1, l=10, r=1){ #a=comp.strength; d=self limit.
-  l*r/(d+mean_a*(l-1))
+get_N_total <- function(meanA=0.2, d=1, n=10, r=1){ #a=comp.strength; d=self limit.
+  n*r/(d+meanA*(n-1))
 }
 
 #compute fraction of patches with m species in a metacommunity of n species
@@ -142,5 +142,46 @@ get_fraction_m <- function(meanA=0.5, m=2, n=3, ...){
   choose(n, m) * feas1combo
   }
 
+#get Ni when N0i is larger than zero for all i
+get_Ni_N0iLargerThen0 <- function(a=0.5, n=10, d=1e-4, p=100, N0Inv=1/1, ri=1, SumN0k=10) {
+  (1/(1 + a*(-1 + n)))*((a + a*n*(-1 + ri) + ri - 2*a*ri)/(1 - a) + 
+   d*(1 - p + ((-1 + a*(4 - 2*n + a*(-5 + a*(-2 + n)*(-1 + n) - N0Inv - n*(-5 + n + (-2 + n)*N0Inv)) + (1 + a*(-2 + n))*(-1 + n)*N0Inv*ri))*SumN0k)/
+        ((-1 + a)*(a - a*n + ri + a*(-2 + n)*ri))))
+}
 
+#get the density of a species i when there is no dispersal
+get_N0i <- function(a=0.5, n=10, r=1, ri=0.1){
+  (a*(n - 1)*r - ri*(a*(n - 2) + 1))/((a - 1)*(a*(n - 1) + 1))
+}
 
+#get sum of densities across patches of a species, in case there is no dispersal
+get_SumN0k <- function(n=10, meanA=0.5, p=100){
+  total <- 0
+  for (m in c(1:n)){
+    total <- total + get_fraction_m(meanA=meanA, m=m, n=n)*get_N_total(meanA=meanA, n=m)}
+  1/n*p*total
+}
+
+#get Ni when N0i is equal to zero (for at least the focal sp i)
+#SumN0j is a RV: it is the sum of biomass across species in a patch, 
+#where m species (m<n) coexist when there is no dispersal.
+get_Ni_N0iEqualTo0 <- function(d=1e-4, SumN0k=10, ri=1, meanA=0.5, SumN0j){
+  (d*SumN0k)/(ri - meanA*SumN0j)
+}
+
+#make a distribution of nr of species in a patch in
+#case there is no dispersal
+make_distribution <- function(n, meanA=0.5){
+  probs <- NULL
+  for (m in c(1:n))
+  {
+    probs <- c(probs, get_fraction_m(meanA=meanA, m=m, n=n))
+  }
+  probs
+}
+
+#sample a SumN0j (with j \neq i), given on how likely it is to have coexistence
+sample_SumN0j <- function(meanA=0.5, n, d=1, r=1, probs){
+  densities <- (c(1:n)-1)*r/(1+meanA*(c(1:n)-1))
+  sample(densities, size=1, prob = probs)
+}
