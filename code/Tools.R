@@ -149,6 +149,13 @@ get_Ni_N0iLargerThen0 <- function(a=0.5, n=10, d=1e-4, p=100, N0Inv=1/1, ri=1, S
         ((-1 + a)*(a - a*n + ri + a*(-2 + n)*ri))))
 }
 
+#Simplified version, assuming that N0i times the mean of 1/N0i across species is roughly equal to 1
+#N0i has no default because needs to be computed by get_N0i
+get_Ni_N0iLargerThen0 <- function(a=0.5, n=10, d=1e-4, p=100, 
+                                  N0i, SumN0k=10) {
+  ((1 + a*(-1 + n))*N0i^2 + d*(N0i - N0i*p + SumN0k))/(N0i + a*(-1 + n)*N0i)
+}
+
 #get the density of a species i when there is no dispersal
 get_N0i <- function(a=0.5, n=10, r=1, ri=0.1){
   (a*(n - 1)*r - ri*(a*(n - 2) + 1))/((a - 1)*(a*(n - 1) + 1))
