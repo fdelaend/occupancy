@@ -187,8 +187,5 @@ make_distribution <- function(n, meanA=0.5){
   probs
 }
 
-#sample a SumN0j (with j \neq i), given on how likely it is to have coexistence
-sample_SumN0j <- function(meanA=0.5, n, d=1, r=1, probs){
-  densities <- (c(1:n)-1)*r/(1+meanA*(c(1:n)-1))
-  sample(densities, size=1, prob = probs)
-}
+#get sum across m coexisting species (SumN0j)
+#already exists: is get_N_total

@@ -1,8 +1,8 @@
 
 # CALCULATIONS ------
-data <- expand_grid(n = c(3, 4, 6), meanA = c(0, 0.2, 0.4, 0.8), #, 6
-                    d = seq(-8,-4, length.out=3), #6
-                    sdA = 0, p = 100, rep = c(1:3)) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
+data <- expand_grid(n = c(6), meanA = c(0, 0.2, 0.8), #, 6
+                    d = seq(-8,-4, length.out=2), #6
+                    sdA = 0, p = 100, rep = c(1:2)) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
   #Make parameters
   mutate(d = 10^d) %>%
   mutate(A = pmap(., function(meanA, sdA, n, ...) 
@@ -71,22 +71,7 @@ ggplot(data) +
 ggsave(paste0("../figures/feas.pdf"), width=6, height = 2, 
        device = "pdf")
 
-## total biomass ----
-ggplot(data %>% 
-         mutate(NTotPred = p*get_N_total(mean_a=meanA, d=1, l=n, r=1))) + 
-  scale_linetype_discrete(rep("solid", 100)) +
-  theme_bw() +
-  scale_color_gradient(low = "yellow", high = "red") +
-  aes(x=log10(d), y=NTot, col=meanA) + 
-  labs(x=expression(paste("log"[10],"(d)")), 
-       y="total biomass \n across network", col="a") +
-  geom_point() + 
-  facet_grid(cols=vars(n))
-
-ggsave(paste0("../figures/biomass.pdf"), width=5, height = 2, 
-       device = "pdf")
-
-## the number of patches occupying m<=n species in case there is no dispersal:
+## showcase accuracy of f(m) -----
 dataNoDisp <- data %>%
   select(n, A, meanA, d, p, rep, nrPatchesM) %>%
   filter(d==min(d), meanA>0) %>%
@@ -113,21 +98,65 @@ ggplot(dataNoDisp %>% mutate(meanA2 = meanA) %>%
   facet_grid(cols=vars(n)) #+ 
   #geom_abline(slope=1, intercept = 0)
 
-## Does a well-mixed system behave as a single system?
-# No
-# But switching off dispersal gives same pattern,
-# so probably only due to the fact that we have many patches, 
-# some of which contain both, others only 1, still others only 2. 
+## showcase P() -----
+#Case where i is extinct w/o dispersal
+Prob1 <- expand_grid(meanA = c(0.1, 0.2, 0.8), n=c(4, 6), sampleSize = 100) %>%
+  mutate(NTotalValues = map(n, ~get_N_total(n=c(1:(.x)))), #total across sp; a RV
+         NTotalProbs = map2(n, meanA, ~make_distribution(n=.x, meanA=.y)),
+         NMeanK = map2_dbl(NTotalValues, NTotalProbs, ~sum(.x*.y))) %>% #mean across sites (intermediate result for NTotalK)
+  expand_grid(d=seq(-8,-4, length.out=6), p=100) %>%
+  mutate(NTotalK = NMeanK*p/n) %>%
+  mutate(d=10^d) %>%
+  mutate(NTotal = pmap(., function(NTotalValues, sampleSize, NTotalProbs, ...) { #sample NTotal
+    sample(x=NTotalValues, size=sampleSize, prob = NTotalProbs, replace=T)})) %>%
+  mutate(ri = pmap(., function(meanA, NTotal, sampleSize, ...){ #sample ri
+      runif(sampleSize, min=0, max=meanA*NTotal)})) %>%
+  mutate(Ni = pmap(., function(d, NTotalK, meanA, NTotal, ri, ...){
+    d*NTotalK/(meanA*NTotal-ri)})) %>% #compute Ni
+  mutate(ProbNi = map2_dbl(Ni, sampleSize, ~sum(.x>extinctionThreshold)/.y)) %>%
+  mutate(ProbNi0Zero = pmap_dbl(., function(n, NTotalProbs, ...){
+    sum(NTotalProbs[1:(n-1)]*(1-c(1:(n-1))/n)) })) %>%
+  mutate(Prob = ProbNi*ProbNi0Zero)
 
-  
-## Can we predict the total density across the whole network 
-## with a model that acts as if all were a single system with summed Rs as the R?
-ggplot(data) + 
-  scale_color_gradient(low = "yellow", high = "red") +
+ggplot(Prob1) + 
   theme_bw() +
-  aes(x=NsingleTotal, y=NTot, col=d) + 
-  geom_abline(intercept = 0, slope = 1) +
-  geom_point()
-#No!
+  scale_color_gradient(low = "yellow", high = "red") +
+  aes(x=log10(d), y=Prob, col=meanA) + 
+  geom_point() + 
+  facet_grid(cols=vars(n)) #+ 
+
+## Check mean of inverse of N -----
+dataNoDisp <- data %>%
+  select(n, meanA, d, rep, NHat) %>%
+  filter(d==min(d)) %>%
+  mutate(NHat = map(NHat, ~.x %>%
+                      filter(density>extinctionThreshold) %>%
+                      group_by(location) %>%
+                      summarise(meanInv = mean(1/density),
+                                invMean = 1/(mean(density))))) %>%
+  unnest(NHat)
+  
+ggplot(dataNoDisp) + 
+  aes(x=as.factor(meanA), y=log10(meanInv)) + 
+  geom_boxplot()
+ggplot(dataNoDisp) + 
+  aes(x=as.factor(meanA), y=log10(invMean)) + 
+  geom_boxplot()
 
 # LEFTOVERS ---------
+
+
+## total biomass ----
+ggplot(data %>% 
+         mutate(NTotPred = p*get_N_total(mean_a=meanA, d=1, l=n, r=1))) + 
+  scale_linetype_discrete(rep("solid", 100)) +
+  theme_bw() +
+  scale_color_gradient(low = "yellow", high = "red") +
+  aes(x=log10(d), y=NTot, col=meanA) + 
+  labs(x=expression(paste("log"[10],"(d)")), 
+       y="total biomass \n across network", col="a") +
+  geom_point() + 
+  facet_grid(cols=vars(n))
+
+ggsave(paste0("../figures/biomass.pdf"), width=5, height = 2, 
+       device = "pdf")
