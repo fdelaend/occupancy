@@ -143,17 +143,17 @@ get_fraction_m <- function(meanA=0.5, m=2, n=3, ...){
   }
 
 #get Ni when N0i is larger than zero for all i
-get_Ni_N0iLargerThen0 <- function(a=0.5, n=10, d=1e-4, p=100, N0Inv=1/1, ri=1, SumN0k=10) {
+get_Ni_N0iLargerThen0 <- function(a=0.5, n=10, d=1e-4, p=100, N0Inv=1/1, ri=1, NTotalK=10) {
   (1/(1 + a*(-1 + n)))*((a + a*n*(-1 + ri) + ri - 2*a*ri)/(1 - a) + 
-   d*(1 - p + ((-1 + a*(4 - 2*n + a*(-5 + a*(-2 + n)*(-1 + n) - N0Inv - n*(-5 + n + (-2 + n)*N0Inv)) + (1 + a*(-2 + n))*(-1 + n)*N0Inv*ri))*SumN0k)/
+   d*(1 - p + ((-1 + a*(4 - 2*n + a*(-5 + a*(-2 + n)*(-1 + n) - N0Inv - n*(-5 + n + (-2 + n)*N0Inv)) + (1 + a*(-2 + n))*(-1 + n)*N0Inv*ri))*NTotalK)/
         ((-1 + a)*(a - a*n + ri + a*(-2 + n)*ri))))
 }
 
 #Simplified version, assuming that N0i times the mean of 1/N0i across species is roughly equal to 1
 #N0i has no default because needs to be computed by get_N0i
 get_Ni_N0iLargerThen0 <- function(a=0.5, n=10, d=1e-4, p=100, 
-                                  N0i, SumN0k=10) {
-  ((1 + a*(-1 + n))*N0i^2 + d*(N0i - N0i*p + SumN0k))/(N0i + a*(-1 + n)*N0i)
+                                  N0i, NTotalK=10) {
+  ((1 + a*(-1 + n))*N0i^2 + d*(N0i - N0i*p + NTotalK))/(N0i + a*(-1 + n)*N0i)
 }
 
 #get the density of a species i when there is no dispersal
@@ -162,7 +162,7 @@ get_N0i <- function(a=0.5, n=10, r=1, ri=0.1){
 }
 
 #get sum of densities across patches of a species, in case there is no dispersal
-get_SumN0k <- function(n=10, meanA=0.5, p=100){
+get_NTotalK <- function(n=10, meanA=0.5, p=100){
   total <- 0
   for (m in c(1:n)){
     total <- total + get_fraction_m(meanA=meanA, m=m, n=n)*get_N_total(meanA=meanA, n=m)}
@@ -172,8 +172,8 @@ get_SumN0k <- function(n=10, meanA=0.5, p=100){
 #get Ni when N0i is equal to zero (for at least the focal sp i)
 #SumN0j is a RV: it is the sum of biomass across species in a patch, 
 #where m species (m<n) coexist when there is no dispersal.
-get_Ni_N0iEqualTo0 <- function(d=1e-4, SumN0k=10, ri=1, meanA=0.5, SumN0j){
-  (d*SumN0k)/(ri - meanA*SumN0j)
+get_Ni_N0iEqualTo0 <- function(d=1e-4, NTotalK=10, ri=1, meanA=0.5, SumN0j){
+  (d*NTotalK)/(ri - meanA*SumN0j)
 }
 
 #make a distribution of nr of species in a patch in
@@ -198,7 +198,7 @@ make_distribution <- function(n, meanA=0.5){
 #NTotalK = total density of a species across the network
 #p = nr of patches
 get_density_weak <- function(meanA, n, m, ri, rInv, r, d, NTotalK, p, ...) {
-  -((meanA*n*r)/(1 + meanA*n)) + ri + (d*(-((1 + meanA*(-2 + m))*NTotalK) + 
-         ri*(-1 + p + meanA*(-1 + m)*rInv*NTotalK)))/(ri + meanA*m*ri)
+  ((-1 + meanA)*d*(-1 + p)*ri - ri*(ri + meanA*(r - m*r + (-2 + m)*ri)) + 
+     d*(1 + meanA*(-2 + m + ri*rInv - m*ri*rInv))*NTotalK)/((-1 + meanA)*(1 + meanA*(-1 + m))*ri)
 }
 
