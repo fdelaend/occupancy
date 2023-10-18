@@ -98,30 +98,35 @@ ggplot(dataNoDisp %>% mutate(meanA2 = meanA) %>%
   facet_grid(cols=vars(n)) #+ 
   #geom_abline(slope=1, intercept = 0)
 
-## showcase P() -----
+## Analytical predictions -----
 #Case where i is extinct w/o dispersal
-Prob1 <- expand_grid(meanA = c(0.1, 0.2, 0.8), n=c(4, 6), sampleSize = 100) %>%
+Prob1 <- expand_grid(meanA = c(0.01, 0.02, 0.6, 0.8), n=c(4, 6), sampleSize = 100) %>%
   mutate(NTotalValues = map(n, ~get_N_total(n=c(1:(.x)))), #total across sp; a RV
-         NTotalProbs = map2(n, meanA, ~make_distribution(n=.x, meanA=.y)),
-         NMeanK = map2_dbl(NTotalValues, NTotalProbs, ~sum(.x*.y))) %>% #mean across sites (intermediate result for NTotalK)
+         mProbs = map2(n, meanA, ~make_distribution(n=.x, meanA=.y)),
+         NMeanK = map2_dbl(NTotalValues, mProbs, ~sum(.x*.y))) %>% #mean across sites (intermediate result for NTotalK)
   expand_grid(d=seq(-8,-4, length.out=6), p=100) %>%
   mutate(NTotalK = NMeanK*p/n) %>%
   mutate(d=10^d) %>%
-  mutate(NTotal = pmap(., function(NTotalValues, sampleSize, NTotalProbs, ...) { #sample NTotal
-    sample(x=NTotalValues, size=sampleSize, prob = NTotalProbs, replace=T)})) %>%
+  mutate(NTotal = pmap(., function(NTotalValues, sampleSize, mProbs, ...) { #sample NTotal
+    sample(x=NTotalValues, size=sampleSize, prob = mProbs, replace=T)})) %>%
   mutate(ri = pmap(., function(meanA, NTotal, sampleSize, ...){ #sample ri
       runif(sampleSize, min=0, max=meanA*NTotal)})) %>%
-  mutate(Ni = pmap(., function(d, NTotalK, meanA, NTotal, ri, ...){
-    d*NTotalK/(meanA*NTotal-ri)})) %>% #compute Ni
-  mutate(ProbNi = map2_dbl(Ni, sampleSize, ~sum(.x>extinctionThreshold)/.y)) %>%
-  mutate(ProbNi0Zero = pmap_dbl(., function(n, NTotalProbs, ...){
-    sum(NTotalProbs[1:(n-1)]*(1-c(1:(n-1))/n)) })) %>%
-  mutate(Prob = ProbNi*ProbNi0Zero)
+  mutate(r = map(ri, ~mean(.x)),  #compute mean and mean of inverse
+         rInv = map(ri, ~mean(1/.x))) %>%
+  mutate(m= map2(mProbs, sampleSize, ~sample(x=c(1:length(.x)), size=.y, prob=.x, replace=T))) %>% #sample m's
+  mutate(NiStrong = pmap(., function(d, NTotalK, meanA, NTotal, ri, ...){
+    d*NTotalK/(meanA*NTotal-ri)})) %>% #compute Ni for strong interactions
+  mutate(NiWeak = pmap(., get_density_weak)) %>% #compute Ni for weak interactions
+  mutate(Ni = pmap(., function(meanA, NiWeak, NiStrong,...){NiWeak*(meanA<0.5)+NiStrong*(meanA>=0.5)})) %>%#get proper Ni according to meanA
+  mutate(ProbNi = map2_dbl(Ni, sampleSize, #prob when strong interactions
+                           ~sum(.x>extinctionThreshold)/.y)) %>%
+  mutate(ProbNi0Zero = pmap_dbl(., function(n, mProbs, ...){
+    sum(mProbs[1:(n-1)]*(1-c(1:(n-1))/n)) })) 
 
 ggplot(Prob1) + 
   theme_bw() +
   scale_color_gradient(low = "yellow", high = "red") +
-  aes(x=log10(d), y=Prob, col=meanA) + 
+  aes(x=log10(d), y=ProbNi, col=meanA) + 
   geom_point() + 
   facet_grid(cols=vars(n)) #+ 
 

@@ -187,5 +187,18 @@ make_distribution <- function(n, meanA=0.5){
   probs
 }
 
-#get sum across m coexisting species (SumN0j)
-#already exists: is get_N_total
+#get pop density of focal species when interactions are weak
+#a = interaction strength
+#n = nr of species
+#r = mean growth rate
+#rInv = mean of inverse growth rate
+#ri = sample of growth rate for sp i
+#d = dispersal rate
+#m = locally persisting species
+#NTotalK = total density of a species across the network
+#p = nr of patches
+get_density_weak <- function(meanA, n, m, ri, rInv, r, d, NTotalK, p, ...) {
+  -((meanA*n*r)/(1 + meanA*n)) + ri + (d*(-((1 + meanA*(-2 + m))*NTotalK) + 
+         ri*(-1 + p + meanA*(-1 + m)*rInv*NTotalK)))/(ri + meanA*m*ri)
+}
+
