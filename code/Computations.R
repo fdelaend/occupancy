@@ -1,6 +1,6 @@
 
 # CALCULATIONS ------
-data <- expand_grid(n = c(6), meanA = c(0, 0.2, 0.8), #, 6
+data <- expand_grid(n = c(6), meanA = c(0.2, 0.8), #, 6
                     d = seq(-8,-4, length.out=2), #6
                     sdA = 0, p = 100, rep = c(1:2)) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
   #Make parameters
@@ -19,8 +19,6 @@ data <- expand_grid(n = c(6), meanA = c(0, 0.2, 0.8), #, 6
   #Add R for later analysis
   mutate(NHat = map2(NHat, R, ~ .x %>% mutate(R=.y))) %>%
   #Analyse: 
-  #0/cv of R within a patch
-  mutate(cvR = map(NHat, ~ .x %>% group_by(location) %>% summarize(cvR = sd(R)/mean(R)))) %>%
   #1/nr of patches where a subset m<= n persists
   mutate(nrPatchesM = pmap(., function(NHat, n,...) {
     NHat %>% mutate(present = density>extinctionThreshold) %>%
@@ -29,30 +27,14 @@ data <- expand_grid(n = c(6), meanA = c(0, 0.2, 0.8), #, 6
       mutate(m = fct_expand(m, as.character(c(1:n)))) %>%
       group_by(m) %>%
       count(m, .drop=F, name="nrPatches")})) %>%
-  #1.1/nr of patches in which all n species persist
+  #2/nr of patches in which all n species persist
   mutate(nrPatchesN = map2_dbl(nrPatchesM, n, ~ (.x %>% filter(m==.y))$nrPatches)) %>%
-  mutate(propPatchesN = nrPatchesN/p) %>%
-  #2/total density across all patches and species
-  mutate(NTot = map_dbl(NHat, ~ sum(.x["density"]))) %>%#total density across all patches
-  #3/mean density of each species across all patches  
-  mutate(meanAcross = pmap(., function(NHat,...) {
+  mutate(propPatchesN = nrPatchesN/p) %>% #proportion
+  #3/total density across all patches of a species
+  mutate(NTotalK = pmap(., function(NHat,...) {
     NHat %>% 
       group_by(sp) %>%
-      summarize(meanNAcross = mean(density))})) %>%
-  #4/mean density at each site (and mean of inverse density), across all species
-  mutate(meanWithin = pmap(., function(NHat,...) {
-    NHat %>% 
-      group_by(location) %>%
-      summarize(meanNWithin = mean(density),
-                meanNWithinInv = mean(1/density))})) %>%
-  #5/total of local interactions experienced by every species: R - AN, 
-  # after having set diag(A) to zero (because we only want interactions with heterospecifics)
-  mutate(ANoti = map(A, ~ set_diagonal(A=.x, d=0))) %>% #set self to 0
-  mutate(X = map2(NHat, ANoti, ~ c(.x$R)-.y%*%c(.x$density))) %>%
-  # add info to NHat solution
-  mutate(NHat = map2(NHat, X, ~ .x %>% mutate(X=.y[,1]))) %>%
-  mutate(XMean = map(NHat, ~ .x %>% group_by(location) %>% 
-                       summarize(XMean=mean(X^2))))
+      summarize(NTotalK = sum(density))}))
 
 # PLOTS ------
 ## main plot ----
@@ -104,13 +86,14 @@ Prob1 <- expand_grid(meanA = c(0.01, 0.02, 0.6, 0.8), n=c(4, 6), sampleSize = 10
   mutate(NTotalValues = map(n, ~get_N_total(n=c(1:(.x)))), #total across sp; a RV
          mProbs = map2(n, meanA, ~make_distribution(n=.x, meanA=.y)),
          NMeanK = map2_dbl(NTotalValues, mProbs, ~sum(.x*.y))) %>% #mean across sites (intermediate result for NTotalK)
-  expand_grid(d=seq(-8,-4, length.out=6), p=100) %>%
+  expand_grid(d=seq(-6,-4, length.out=6), p=100) %>%
   mutate(NTotalK = NMeanK*p/n) %>%
   mutate(d=10^d) %>%
   mutate(NTotal = pmap(., function(NTotalValues, sampleSize, mProbs, ...) { #sample NTotal
     sample(x=NTotalValues, size=sampleSize, prob = mProbs, replace=T)})) %>%
-  mutate(ri = pmap(., function(meanA, NTotal, sampleSize, ...){ #sample ri
-      runif(sampleSize, min=0, max=meanA*NTotal)})) %>%
+  mutate(ri = map(sampleSize, ~sample(seq(1e-3,4,length.out=100), size=.x, 
+                                      prob=dnorm(seq(0,4,length.out=100), 1, 0.7),
+                                      replace = T))) %>%#sample from truncated normal
   mutate(r = map(ri, ~mean(.x)),  #compute mean and mean of inverse
          rInv = map(ri, ~mean(1/.x))) %>%
   mutate(m= map2(mProbs, sampleSize, ~sample(x=c(1:length(.x)), size=.y, prob=.x, replace=T))) %>% #sample m's
@@ -118,8 +101,8 @@ Prob1 <- expand_grid(meanA = c(0.01, 0.02, 0.6, 0.8), n=c(4, 6), sampleSize = 10
     d*NTotalK/(meanA*NTotal-ri)})) %>% #compute Ni for strong interactions
   mutate(NiWeak = pmap(., get_density_weak)) %>% #compute Ni for weak interactions
   mutate(Ni = pmap(., function(meanA, NiWeak, NiStrong,...){NiWeak*(meanA<0.5)+NiStrong*(meanA>=0.5)})) %>%#get proper Ni according to meanA
-  mutate(ProbNi = map2_dbl(Ni, sampleSize, #prob when strong interactions
-                           ~sum(.x>extinctionThreshold)/.y)) %>%
+  mutate(ProbNi = pmap_dbl(., function(n, Ni, sampleSize, ...){ #prob 
+                           (sum(Ni>extinctionThreshold)/sampleSize)^n})) %>%
   mutate(ProbNi0Zero = pmap_dbl(., function(n, mProbs, ...){
     sum(mProbs[1:(n-1)]*(1-c(1:(n-1))/n)) })) 
 
@@ -129,24 +112,6 @@ ggplot(Prob1) +
   aes(x=log10(d), y=ProbNi, col=meanA) + 
   geom_point() + 
   facet_grid(cols=vars(n)) #+ 
-
-## Check mean of inverse of N -----
-dataNoDisp <- data %>%
-  select(n, meanA, d, rep, NHat) %>%
-  filter(d==min(d)) %>%
-  mutate(NHat = map(NHat, ~.x %>%
-                      filter(density>extinctionThreshold) %>%
-                      group_by(location) %>%
-                      summarise(meanInv = mean(1/density),
-                                invMean = 1/(mean(density))))) %>%
-  unnest(NHat)
-  
-ggplot(dataNoDisp) + 
-  aes(x=as.factor(meanA), y=log10(meanInv)) + 
-  geom_boxplot()
-ggplot(dataNoDisp) + 
-  aes(x=as.factor(meanA), y=log10(invMean)) + 
-  geom_boxplot()
 
 # LEFTOVERS ---------
 
