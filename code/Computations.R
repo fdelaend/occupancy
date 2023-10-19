@@ -2,7 +2,7 @@
 # CALCULATIONS ------
 data <- expand_grid(n = c(4), meanA = c(0.2, 0.8), #, 6
                     d = seq(-8,-4, length.out=2), #6
-                    sdA = 0, p = 150, rep = c(1:2)) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
+                    sdA = 0, p = 100, rep = c(1:2)) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
   #Make parameters
   mutate(d = 10^d) %>%
   mutate(A = pmap(., function(meanA, sdA, n, ...) 
@@ -33,8 +33,8 @@ data <- expand_grid(n = c(4), meanA = c(0.2, 0.8), #, 6
   #3/total density across all patches of a species
   mutate(NTotalK = pmap(., function(NHat,...) {
     NHat %>% 
-      group_by(sp) %>%
-      summarize(NTotalK = sum(density))}))
+      group_by(sp) %>% #sum across patches for every sp.
+      summarize(NTotalK = sum(density))})) #so you can check it's comparable across sp
 
 # PLOTS ------
 ## main plot ----
@@ -55,19 +55,15 @@ ggsave(paste0("../figures/feas.pdf"), width=6, height = 2,
 
 ## showcase accuracy of f(m) -----
 dataNoDisp <- data %>%
-  select(n, A, meanA, d, p, rep, nrPatchesM) %>%
+  select(n, R, meanA, d, p, rep, nrPatchesM, NTotalK) %>%
   filter(d==min(d), meanA>0) %>%
+  mutate(meanR = map_dbl(R, ~mean(.x)),
+         meanNTotalK = map_dbl(NTotalK, ~mean(.x$NTotalK))) %>%
   unnest(nrPatchesM) %>%
   mutate(m=as.numeric(as.character(m))) %>%
   mutate(fractionPatches = nrPatches/p) %>%
-  mutate(fractionPatchesTest = pmap_dbl(., get_fraction_m))
-
-ggplot(dataNoDisp) + 
-  theme_bw() +
-  scale_color_gradient(low = "yellow", high = "red") +
-  aes(x=fractionPatches, y=fractionPatchesTest, col=meanA) + 
-  geom_point() + 
-  geom_abline(slope=1, intercept = 0)
+  mutate(fractionPatchesPredicted = pmap_dbl(., get_fraction_m)) %>%
+  mutate(NTotalPredicted = get_N_total(meanA=meanA, d=1, n=m, r=meanR)) #total for a patch with m species
 
 ggplot(dataNoDisp %>% mutate(meanA2 = meanA) %>%
          unite("it", rep, meanA2)) + 
@@ -75,10 +71,18 @@ ggplot(dataNoDisp %>% mutate(meanA2 = meanA) %>%
   scale_linetype_manual(values=rep("solid", 1000)) + 
   scale_color_gradient(low = "yellow", high = "red") +
   geom_point(aes(x=m, y=fractionPatches, col=meanA), alpha=0.5) + 
-  aes(x=m, y=fractionPatchesTest, col=meanA, lty=as_factor(it)) + #,,  
+  aes(x=m, y=fractionPatchesPredicted, col=meanA, lty=as_factor(it)) + #,,  
   geom_line(show.legend = F) + 
   facet_grid(cols=vars(n)) #+ 
   #geom_abline(slope=1, intercept = 0)
+
+## showcase accuracy of NTotalK -----
+dataNoDisp <- dataNoDisp %>%
+  mutate(NTotalKMPredicted = fractionPatchesPredicted*p*NTotalPredicted) %>% #total across all patches with m species
+  group_by(n, meanA, rep) %>%
+  summarize(NTotalKPredicted = sum(NTotalKMPredicted),
+            meanNTotalK = mean(meanNTotalK)) %>%
+  mutate(NTotalKPredicted = NTotalKPredicted/n)
 
 ## Analytical predictions -----
 #Case where i is extinct w/o dispersal
