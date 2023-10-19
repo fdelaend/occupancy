@@ -72,8 +72,9 @@ make_R_spatial <- function(n, p, negative_sign=10000, ...){
   #sample from a sphere to get the directions right
   rawRs <- t(sample_sphere_surface(dim=n, n = p, radius = 1, positive = TRUE))
   #now make sure the mean r across species is 1 at all patches
-  rawRs <- diag(1/rowMeans(rawRs)) %*% rawRs 
-  #abd put everything into a nice format
+  rawRs <- rawRs %*% diag(1/colMeans(rawRs))
+  rawRs <- diag(1/rowMeans(rawRs)) %*% rawRs  
+  #and put everything into a nice format
   Rs     <- as_tibble(rawRs)%>%
     rename_with(~gsub("V","", .x, fixed = TRUE)) %>% #give correct sign to intrinsic growth rate of consumer
     mutate(location=c(1:p)) %>%

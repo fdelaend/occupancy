@@ -1,8 +1,8 @@
 
 # CALCULATIONS ------
-data <- expand_grid(n = c(6), meanA = c(0.2, 0.8), #, 6
+data <- expand_grid(n = c(4), meanA = c(0.2, 0.8), #, 6
                     d = seq(-8,-4, length.out=2), #6
-                    sdA = 0, p = 100, rep = c(1:2)) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
+                    sdA = 0, p = 150, rep = c(1:2)) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
   #Make parameters
   mutate(d = 10^d) %>%
   mutate(A = pmap(., function(meanA, sdA, n, ...) 
