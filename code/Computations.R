@@ -61,6 +61,7 @@ ggsave(paste0("../figures/feas.pdf"), width=6, height = 2,
 dataNoDisp <- data %>%
   select(n, R, meanA, d, p, rep, nrPatchesM, NTotalK) %>%
   filter(d==min(d), meanA>0) %>%
+  select(-d) %>%
   mutate(NTotalK = map_dbl(NTotalK, ~mean(.x$NTotalK))) %>%
   mutate(nrPatchesM = map2(nrPatchesM, n, ~.x %>%
                              mutate(m=as.numeric(as.character(m))) %>%
@@ -96,36 +97,38 @@ ggplot(dataNoDispSimple %>% mutate(meanA2 = meanA) %>%
 
 ## Analytical predictions -----
 #Case where i is extinct w/o dispersal
-Prob1 <- expand_grid(meanA = c(0.01, 0.02, 0.6, 0.8), n=c(4, 6), sampleSize = 100) %>%
-  mutate(NTotalValues = map(n, ~get_N_total(n=c(1:(.x)))), #total across sp; a RV
-         mProbs = map2(n, meanA, ~make_distribution(n=.x, meanA=.y)),
-         NMeanK = map2_dbl(NTotalValues, mProbs, ~sum(.x*.y))) %>% #mean across sites (intermediate result for NTotalK)
-  expand_grid(d=seq(-6,-4, length.out=6), p=100) %>%
-  mutate(NTotalK = NMeanK*p/n) %>%
+Prob1 <- dataNoDisp %>%
+  expand_grid(d=seq(-6,-4, length.out=6), sampleSize = 100) %>%
   mutate(d=10^d) %>%
-  mutate(NTotal = pmap(., function(NTotalValues, sampleSize, mProbs, ...) { #sample NTotal
-    sample(x=NTotalValues, size=sampleSize, prob = mProbs, replace=T)})) %>%
-  mutate(ri = map(sampleSize, ~sample(seq(1e-3,4,length.out=100), size=.x, 
-                                      prob=dnorm(seq(0,4,length.out=100), 1, 0.7),
-                                      replace = T))) %>%#sample from truncated normal
-  mutate(r = map(ri, ~mean(.x)),  #compute mean and mean of inverse
-         rInv = map(ri, ~mean(1/.x))) %>%
-  mutate(m= map2(mProbs, sampleSize, ~sample(x=c(1:length(.x)), size=.y, prob=.x, replace=T))) %>% #sample m's
-  mutate(NiStrong = pmap(., function(d, NTotalK, meanA, NTotal, ri, ...){
-    d*NTotalK/(meanA*NTotal-ri)})) %>% #compute Ni for strong interactions
-  mutate(NiWeak = pmap(., get_density_weak)) %>% #compute Ni for weak interactions
-  mutate(Ni = pmap(., function(meanA, NiWeak, NiStrong,...){NiWeak*(meanA<0.5)+NiStrong*(meanA>=0.5)})) %>%#get proper Ni according to meanA
-  mutate(ProbNi = pmap_dbl(., function(n, Ni, sampleSize, ...){ #prob 
-                           (sum(Ni>extinctionThreshold)/sampleSize)^n})) %>%
-  mutate(ProbNi0Zero = pmap_dbl(., function(n, mProbs, ...){
-    sum(mProbs[1:(n-1)]*(1-c(1:(n-1))/n)) })) 
+  select(-R) %>%
+  mutate(nrPatchesM = map2(nrPatchesM, p, ~.x%>%mutate(prob=nrPatches/.y))) %>%
+  mutate(NTotal = map2(nrPatchesM, sampleSize,
+                      ~sample(x=.x$NTotalMPredicted, size=.y, 
+                              prob = .x$prob, replace=T))) %>% #sample NTotal
+  mutate(ri = map(sampleSize, ~sample(x=pdfRs$x, size=.x, prob = pdfRs$y/sum(pdfRs$y), replace = T))) %>%#sample from truncated normal
+  mutate(Ni = pmap(., function(d, NTotalK, meanA, NTotal, ri, ...){
+    d*NTotalK/(meanA*NTotal-ri)})) %>% #compute Ni when Ni0=0
+  mutate(ProbNi = pmap_dbl(., function(n, Ni, ...){ #prob 
+                           (sum(Ni>extinctionThreshold)/sum(Ni>0))^n})) #only consider cases where Ni>0, b/c Ni<0 means Ni0>0 (which we're not interested in here)
 
 ggplot(Prob1) + 
   theme_bw() +
   scale_color_gradient(low = "yellow", high = "red") +
   aes(x=log10(d), y=ProbNi, col=meanA) + 
   geom_point() + 
-  facet_grid(cols=vars(n)) #+ 
+  facet_grid(cols=vars(n)) +
+  labs(x=expression(paste("log"[10],"(d)")), 
+       y="Patch occupancy (fraction) when exclusion w/o dispersal", col="a")
+  
+
+#  mutate(r = map(ri, ~mean(.x)),  #compute mean and mean of inverse
+#  rInv = map(ri, ~mean(1/.x))) %>%
+#  mutate(m = map2(mProbs, sampleSize, ~sample(x=c(1:length(.x)), size=.y, prob=.x, replace=T))) %>% #sample m's
+#  mutate(NiWeak = pmap(., get_density_weak)) %>% #compute Ni for weak interactions
+#mutate(Ni = pmap(., function(meanA, NiWeak, NiStrong,...){NiWeak*(meanA<0.5)+NiStrong*(meanA>=0.5)})) %>%#get proper Ni according to meanA
+#  mutate(ProbNi0Zero = pmap_dbl(., function(n, mProbs, ...){
+#sum(mProbs[1:(n-1)]*(1-c(1:(n-1))/n)) })) 
+
 
 # LEFTOVERS ---------
 
