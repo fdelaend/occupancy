@@ -203,3 +203,13 @@ get_density_weak <- function(meanA, n, m, ri, rInv, r, d, NTotalK, p, ...) {
      d*(1 + meanA*(-2 + m + ri*rInv - m*ri*rInv))*NTotalK)/((-1 + meanA)*(1 + meanA*(-1 + m))*ri)
 }
 
+#get mean of a truncated pdf (i.e. that fraction above a certain quantile q)
+#pdfFitted = output of density()
+#q = quantile, where 1 = 100th quantile, 0.5 = 50th etc..
+get_mean_trunc <- function(pdfFitted, q=1){
+  probdens <- cumsum(pdfFitted$y)/sum(pdfFitted$y) #discretize (make total density 1)
+  #identify x that are above quantile
+  aboveQ   <- which(probdens>=q)
+  sum(pdfFitted$x[aboveQ]*pdfFitted$y[aboveQ])/sum(pdfRs$y[aboveQ])
+}
+

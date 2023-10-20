@@ -36,6 +36,10 @@ data <- expand_grid(n = c(4), meanA = c(0.2, 0.8), #, 6
       group_by(sp) %>% #sum across patches for every sp.
       summarize(NTotalK = sum(density))})) #so you can check it's comparable across sp
 
+## fit distribution to r
+Rs     <- data %>% select(R) %>% unnest(cols=R)
+pdfRs  <- density(Rs$R, from=0)
+
 # PLOTS ------
 ## main plot ----
 ggplot(data) + 
@@ -53,17 +57,47 @@ ggplot(data) +
 ggsave(paste0("../figures/feas.pdf"), width=6, height = 2, 
        device = "pdf")
 
-## showcase accuracy of f(m) -----
+## get data w/o dispersal ------
 dataNoDisp <- data %>%
   select(n, R, meanA, d, p, rep, nrPatchesM, NTotalK) %>%
   filter(d==min(d), meanA>0) %>%
-  mutate(meanR = map_dbl(R, ~mean(.x)),
-         meanNTotalK = map_dbl(NTotalK, ~mean(.x$NTotalK))) %>%
-  unnest(nrPatchesM) %>%
-  mutate(m=as.numeric(as.character(m))) %>%
+  mutate(NTotalK = map_dbl(NTotalK, ~mean(.x$NTotalK))) %>%
+  mutate(nrPatchesM = map2(nrPatchesM, n, ~.x %>%
+                             mutate(m=as.numeric(as.character(m))) %>%
+                             mutate(meanR = map2_dbl(.y, m, ~get_mean_trunc(pdfRs, q=1-((.y)/(.x))))))) %>%
+  mutate(nrPatchesM = map2(nrPatchesM, meanA, ~.x %>%
+                             mutate(NTotalMPredicted = get_N_total(meanA=.y, n=m, r=meanR)))) %>% #total density for a patch with m species
+  mutate(NTotalKPredicted = map2_dbl(nrPatchesM, n, ~1/.y*sum(.x$nrPatches * .x$NTotalMPredicted)))
+
+## showcase accuracy of Ntotal(m) ----
+ggplot(dataNoDisp) + 
+  theme_bw() +
+  scale_color_gradient(low = "yellow", high = "red") +
+  aes(x=NTotalK, y=NTotalKPredicted, col=meanA) + 
+  geom_point()
+  
+## showcase accuracy of f(m) -----
+unnest(nrPatchesM) %>%
   mutate(fractionPatches = nrPatches/p) %>%
-  mutate(fractionPatchesPredicted = pmap_dbl(., get_fraction_m)) %>%
-  mutate(NTotalPredicted = get_N_total(meanA=meanA, d=1, n=m, r=meanR)) #total for a patch with m species
+  mutate(fractionPatchesPredicted = pmap_dbl(., get_fraction_m)) 
+
+mutate(NHatTotalPerPatch = map(NHat, ~.x %>% 
+                                 mutate(Rpresent = ifelse(density>extinctionThreshold,
+                                                          R, NA)) %>%
+                                 group_by(location) %>% 
+                                 summarise(NTotal=sum(density),
+                                           m=sum(density>extinctionThreshold),
+                                           meanR=mean(Rpresent, na.rm=T))%>%
+                                 select(m, meanR, NTotal))) %>%
+  unnest(cols=NHatTotalPerPatch) %>%
+  mutate(NTotalPredicted = get_N_total(meanA=meanA, n=m, r=meanR))
+
+ggplot(dataNoDisp) +
+  aes(x=m, y=NTotal, col=meanA) +
+  geom_point()+
+  geom_point(aes(x=m, y=NTotalPredicted, col=meanA), cex=2, pch=3) +
+  facet_grid(vars(n))
+
 
 ggplot(dataNoDisp %>% mutate(meanA2 = meanA) %>%
          unite("it", rep, meanA2)) + 
