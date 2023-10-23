@@ -188,21 +188,6 @@ make_distribution <- function(n, meanA=0.5){
   probs
 }
 
-#get pop density of focal species when interactions are weak
-#a = interaction strength
-#n = nr of species
-#r = mean growth rate
-#rInv = mean of inverse growth rate
-#ri = sample of growth rate for sp i
-#d = dispersal rate
-#m = locally persisting species
-#NTotalK = total density of a species across the network
-#p = nr of patches
-get_density_weak <- function(meanA, n, m, ri, rInv, r, d, NTotalK, p, ...) {
-  ((-1 + meanA)*d*(-1 + p)*ri - ri*(ri + meanA*(r - m*r + (-2 + m)*ri)) + 
-     d*(1 + meanA*(-2 + m + ri*rInv - m*ri*rInv))*NTotalK)/((-1 + meanA)*(1 + meanA*(-1 + m))*ri)
-}
-
 #get mean of a truncated pdf (i.e. that fraction above a certain quantile q)
 #pdfFitted = output of density()
 #q = quantile, where 1 = 100th quantile, 0.5 = 50th etc..
@@ -212,4 +197,29 @@ get_mean_trunc <- function(pdfFitted, q=1){
   aboveQ   <- which(probdens>=q)
   sum(pdfFitted$x[aboveQ]*pdfFitted$y[aboveQ])/sum(pdfRs$y[aboveQ])
 }
+
+#probability of extinction w/o dispersal (for visualisation purposes)
+#feas = vector w feasibilities of all m for which 1<=m<=n
+get_prob_ext_wo <- function(n, feas){
+  n <- length(feas)
+  probs <- tibble(n=n, m=c(1:n), feas=feas) %>%
+    mutate(prob = feas*(1-m/n))
+  sum(probs$prob)
+}
+
+#value of N1i when persistence w/o dispersal
+# N0i = density of i w/o dispersal
+# m = nr of species coexisting w/o dispersal
+# n = nr of species regionally available
+# N1 = mean of N1j across j that don't persist
+# p = nr of patches
+# SumN0k = total density across whole network for a species (same for all sp)
+# N0Inv = mean of the inverse of N0i
+get_N1i_no_ext_wo <- function(meanA, N0i, m, n, N1, p, SumN0k, 
+                              N0Inv){
+  (-((-1 + meanA)*N0i*(1 + meanA*(m - n)*N1 - p)) + SumN0k + 
+     meanA*(-2 + m + N0i*N0Inv - m*N0i*N0Inv)*SumN0k)/((-1 + meanA)*(1 + meanA*(-1 + m))*N0i)
+}
+
+
 

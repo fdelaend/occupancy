@@ -109,8 +109,11 @@ Prob1 <- dataNoDisp %>%
   mutate(Ni = pmap(., function(d, NTotalK, meanA, NTotal, ri, ...){
     d*NTotalK/(meanA*NTotal-ri)})) %>% #compute Ni when Ni0=0
   mutate(ProbNi = pmap_dbl(., function(n, Ni, ...){ #prob 
-                           (sum(Ni>extinctionThreshold)/sum(Ni>0))^n})) #only consider cases where Ni>0, b/c Ni<0 means Ni0>0 (which we're not interested in here)
-
+                           sum(Ni>extinctionThreshold)/sum(Ni>0)})) %>%#only consider cases where Ni>0, b/c Ni<0 means Ni0>0 (which we're not interested in here)
+  mutate(nrPatchesM = map2(nrPatchesM, n, ~.x %>%
+                             mutate(probNi0Ext = prob*(1-m/.y)))) %>%#add proba that Ni is absent from patches with m sp (w/o disp)
+  mutate(ProbNi0Ext = map_dbl(nrPatchesM, ~sum(.x$probNi0Ext))) #overall proba across all patches
+  
 ggplot(Prob1) + 
   theme_bw() +
   scale_color_gradient(low = "yellow", high = "red") +
@@ -118,8 +121,16 @@ ggplot(Prob1) +
   geom_point() + 
   facet_grid(cols=vars(n)) +
   labs(x=expression(paste("log"[10],"(d)")), 
-       y="Patch occupancy (fraction) when exclusion w/o dispersal", col="a")
+       y="Patch occupancy focal sp, exclusion w/o dispersal", col="a")
   
+ggplot(Prob1) + 
+  theme_bw() +
+  scale_color_gradient(low = "yellow", high = "red") +
+  aes(x=log10(d), y=ProbNi0Ext, col=meanA) + 
+  geom_point() + 
+  facet_grid(cols=vars(n)) +
+  labs(x=expression(paste("log"[10],"(d)")), 
+       y="Probability that i is extinct w/o disp.", col="a")
 
 #  mutate(r = map(ri, ~mean(.x)),  #compute mean and mean of inverse
 #  rInv = map(ri, ~mean(1/.x))) %>%
