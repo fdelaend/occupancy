@@ -187,15 +187,23 @@ make_distribution <- function(n, meanA=0.5){
   }
   probs
 }
-
-#get mean of a truncated pdf (i.e. that fraction above a certain quantile q)
+#truncate a distribution (i.e. cut off fraction below (if direction="up") 
+#or above (direction="down") a certain quantile q)
 #pdfFitted = output of density()
 #q = quantile, where 1 = 100th quantile, 0.5 = 50th etc..
-get_mean_trunc <- function(pdfFitted, q=1){
-  probdens <- cumsum(pdfFitted$y)/sum(pdfFitted$y) #discretize (make total density 1)
+trunc_dist <- function(pdfFitted, q=0.5, direction="up"){
+  cumprob <- cumsum(pdfFitted$y)/sum(pdfFitted$y) #discretize to cum. proba.
   #identify x that are above quantile
-  aboveQ   <- which(probdens>=q)
-  sum(pdfFitted$x[aboveQ]*pdfFitted$y[aboveQ])/sum(pdfRs$y[aboveQ])
+  if(direction=="up") {Qs <- which(cumprob>=q)} else {Qs<-which(cumprob<=q)}
+  list(x=pdfFitted$x[Qs], y=pdfFitted$y[Qs])
+}
+
+#get mean of a truncated pdf
+#pdfFitted = output of trunc_dist()
+#q = quantile, where 1 = 100th quantile, 0.5 = 50th etc..
+get_mean_trunc <- function(pdfFitted, q=0.5, direction="up"){
+  pdfTrunc <- trunc_dist(pdfFitted, q=q, direction=direction)
+  sum(pdfTrunc$x*pdfTrunc$y)/sum(pdfTrunc$y)
 }
 
 #probability of extinction w/o dispersal (for visualisation purposes)

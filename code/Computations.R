@@ -9,15 +9,15 @@ data <- expand_grid(n = c(4, 6), meanA = c(0.2, 0.4, 0.8), #, 6
     matrix(data = rnorm(n^2, meanA, sdA), ncol = n))) %>% 
   mutate(A = map(A, ~make_symmetric(.x))) %>% #make symmetric and ditch diagonal
   mutate(A = map(A, ~ set_diagonal(A=.x, d=1))) %>% #set self to 1
-  mutate(feasibility = map_dbl(A, ~feasibility(.x))) %>% #compute feasibility
+  #mutate(feasibility = map_dbl(A, ~feasibility(.x))) %>% #compute feasibility
   mutate(A = pmap(., make_block_diagonal)) %>% #make A spatial
   mutate(R = pmap(., make_R_spatial)) %>% #make spatial R (note that the emigration is subtracted later so this is the real local R)
   mutate(D = pmap(., make_D)) %>% #make dispersal matrix
   mutate(N0 = map(R, ~ .x*0+extinctionThreshold)) %>% #set initial conditions
   #Simulate the network
   mutate(NHat = pmap(., get_NHat)) %>%
-  #Add R for later analysis
-  mutate(NHat = map2(NHat, R, ~ .x %>% mutate(R=.y))) %>%
+  #Add R for later analysis: not
+  #mutate(NHat = map2(NHat, R, ~ .x %>% mutate(R=.y))) %>%
   #Analyse: 
   #1/nr of patches where a subset m<= n persists
   mutate(nrPatchesM = pmap(., function(NHat, n,...) {
@@ -29,7 +29,7 @@ data <- expand_grid(n = c(4, 6), meanA = c(0.2, 0.4, 0.8), #, 6
       count(m, .drop=F, name="nrPatches")})) %>%
   #2/nr of patches in which all n species persist
   mutate(nrPatchesN = map2_dbl(nrPatchesM, n, ~ (.x %>% filter(m==.y))$nrPatches)) %>%
-  mutate(propPatchesN = nrPatchesN/p) %>% #proportion
+  mutate(propPatchesN = nrPatchesN/p) %>% #proportion of patches with n sp.
   #3/total density across all patches of a species
   mutate(NTotalK = pmap(., function(NHat,...) {
     NHat %>% 
@@ -39,7 +39,7 @@ data <- expand_grid(n = c(4, 6), meanA = c(0.2, 0.4, 0.8), #, 6
 ## fit distribution to r
 Rs     <- data %>% select(R) %>% unnest(cols=R)
 pdfRs  <- density(Rs$R, from=0)
-
+meanR  <- sum(pdfRs$x*pdfRs$y)/sum(pdfRs$y)#grant mean of R
 # PLOTS ------
 ## main plot ----
 ggplot(data) + 
@@ -50,8 +50,8 @@ ggplot(data) +
   geom_point() +
   labs(x=expression(paste("log"[10],"(d)")), 
        y="Patch occupancy (fraction)", col="a") +
-  geom_line(aes(x=log10(d), y=feasibility, col=meanA,
-                group=interaction(meanA, rep))) + 
+  #geom_line(aes(x=log10(d), y=feasibility, col=meanA,
+  #              group=interaction(meanA, rep))) + 
   facet_grid(cols=vars(n))
 
 ggsave(paste0("../figures/feas.pdf"), width=6, height = 2, 
@@ -62,27 +62,30 @@ dataNoDisp <- data %>%
   select(n, R, meanA, d, p, rep, nrPatchesM, NTotalK) %>%
   filter(d==min(d), meanA>0) %>%
   select(-d) %>%
-  mutate(NTotalK = map_dbl(NTotalK, ~mean(.x$NTotalK))) %>%
-  mutate(nrPatchesM = map2(nrPatchesM, n, ~.x %>%
-                             mutate(m=as.numeric(as.character(m))) %>%
-                             mutate(meanR = map2_dbl(.y, m, ~get_mean_trunc(pdfRs, q=1-((.y)/(.x))))))) %>%
-  mutate(nrPatchesM = map2(nrPatchesM, meanA, ~.x %>%
-                             mutate(NTotalMPredicted = get_N_total(meanA=.y, n=m, r=meanR)))) %>% #total density for a patch with m species
-  mutate(NTotalKPredicted = map2_dbl(nrPatchesM, n, ~1/.y*sum(.x$nrPatches * .x$NTotalMPredicted)))
+  mutate(NTotalK = map_dbl(NTotalK, ~mean(.x$NTotalK))) %>% #mean across sp
+  mutate(nrPatchesM = pmap(., function(nrPatchesM, meanA, n, ...) {
+    nrPatchesM %>%
+    mutate(m=as.numeric(as.character(m))) %>%
+    rowwise() %>%
+    mutate(meanRPer = get_mean_trunc(pdfRs, q=1-(m/n)),#predicted mean r of persisting sp
+           meanRExc = (n*meanR - m*meanRPer)/(n-m),#predicted mean r of excluded
+           fractionPatchesPredicted = get_fraction_m(meanA=meanA, m=m, n=n), #predicted total density in a patch of m persisting sp
+           NTotalMPredicted = get_N_total(meanA=meanA, n=m, r=meanRPer))})) %>%#total density for a patch with m species
+  mutate(NTotalKPredicted = p/n*map_dbl(nrPatchesM, ~sum(.x$fractionPatchesPredicted * .x$NTotalMPredicted)))
 
 ## showcase accuracy of NtotalK ----
 ggplot(dataNoDisp) + 
   theme_bw() +
   scale_color_gradient(low = "yellow", high = "red") +
   aes(x=NTotalK, y=NTotalKPredicted, col=meanA) + 
-  geom_point()
+  geom_point() + 
+  geom_abline(slope=1, intercept=0)
   
 ## showcase accuracy of f(m) -----
 dataNoDispSimple <- dataNoDisp %>%
   select(all_of(c("meanA", "n", "p", "rep", "nrPatchesM"))) %>%
   unnest(nrPatchesM) %>%
-  mutate(fractionPatches = nrPatches/p) %>%
-  mutate(fractionPatchesPredicted = pmap_dbl(., get_fraction_m)) 
+  mutate(fractionPatches = nrPatches/p) 
 
 ggplot(dataNoDispSimple %>% mutate(meanA2 = meanA) %>%
          unite("it", rep, meanA2)) + 
@@ -98,20 +101,24 @@ ggplot(dataNoDispSimple %>% mutate(meanA2 = meanA) %>%
 ## Analytical predictions -----
 #Case where i is extinct w/o dispersal
 Prob1 <- dataNoDisp %>%
+  select(-R) %>%
   expand_grid(d=seq(-6,-4, length.out=6), sampleSize = 100) %>%
   mutate(d=10^d) %>%
-  select(-R) %>%
-  mutate(nrPatchesM = map2(nrPatchesM, p, ~.x%>%mutate(prob=nrPatches/.y))) %>%
-  mutate(NTotal = map2(nrPatchesM, sampleSize,
-                      ~sample(x=.x$NTotalMPredicted, size=.y, 
-                              prob = .x$prob, replace=T))) %>% #sample NTotal
-  mutate(ri = map(sampleSize, ~sample(x=pdfRs$x, size=.x, prob = pdfRs$y/sum(pdfRs$y), replace = T))) %>%#sample from truncated normal
-  mutate(Ni = pmap(., function(d, NTotalK, meanA, NTotal, ri, ...){
-    d*NTotalK/(meanA*NTotal-ri)})) %>% #compute Ni when Ni0=0
+  mutate(samples = map2(nrPatchesM, sampleSize, #sample m
+                       ~tibble(m=sample(x=.x$m, size=.y, 
+                               prob = .x$fractionPatchesPredicted, replace=T)))) %>% 
+  mutate(samples = map2(samples, nrPatchesM, ~left_join(.x, .y, by="m", multiple="all")%>%
+                          select(all_of(c("m", "NTotalMPredicted"))))) %>%
+  mutate(samples = map2(samples, n, ~.x %>% rowwise %>% 
+                         mutate(ri=sample(x=trunc_dist(pdfRs, direction="down", q=1e-2+1-m/.y)$x, size=1, 
+                                          prob = trunc_dist(pdfRs, direction="down", q=1e-2+1-m/.y)$y/sum(trunc_dist(pdfRs, direction="down", q=1e-2+1-m/.y)$y), 
+                                          replace = T)))) %>%#sample from distribution of R
+  mutate(Ni = pmap(., function(d, NTotalKPredicted, meanA, samples, ...){
+    samples %>% mutate(Ni=d*NTotalKPredicted/(meanA*NTotalMPredicted-ri))})) %>% #compute Ni when Ni0=0
   mutate(ProbNi = pmap_dbl(., function(n, Ni, ...){ #prob 
                            sum(Ni>extinctionThreshold)/sum(Ni>0)})) %>%#only consider cases where Ni>0, b/c Ni<0 means Ni0>0 (which we're not interested in here)
   mutate(nrPatchesM = map2(nrPatchesM, n, ~.x %>%
-                             mutate(probNi0Ext = prob*(1-m/.y)))) %>%#add proba that Ni is absent from patches with m sp (w/o disp)
+                             mutate(probNi0Ext = fractionPatchesPredicted*(1-m/.y)))) %>%#add proba that Ni is absent from patches with m sp (w/o disp)
   mutate(ProbNi0Ext = map_dbl(nrPatchesM, ~sum(.x$probNi0Ext))) #overall proba across all patches
   
 ggplot(Prob1) + 
