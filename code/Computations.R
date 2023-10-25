@@ -1,6 +1,6 @@
 
 # CALCULATIONS ------
-data <- expand_grid(n = c(4, 6), meanA = c(0.2, 0.4, 0.8), #, 6
+data <- expand_grid(n = c(4, 6, 8), meanA = c(0.2, 0.4, 0.8), #, 6
                     d = seq(-8,-4, length.out=2), #6
                     sdA = 0, p = 100, rep = c(1:3)) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
   #Make parameters
@@ -79,7 +79,13 @@ ggplot(dataNoDisp) +
   scale_color_gradient(low = "yellow", high = "red") +
   aes(x=NTotalK, y=NTotalKPredicted, col=meanA) + 
   geom_point() + 
-  geom_abline(slope=1, intercept=0)
+  geom_abline(slope=1, intercept=0) + 
+  labs(x=expression(paste(Sigma[{k}],"N"[{"0,i"}]^{(k)},~"simulated")), 
+       y=expression(paste(Sigma[{k}],"N"[{"0,i"}]^{(k)},~"analytical")), 
+       col="a")
+
+ggsave(paste0("../figures/Nk.pdf"), width=3, height = 2, 
+       device = "pdf")
   
 ## showcase accuracy of f(m) -----
 dataNoDispSimple <- dataNoDisp %>%
@@ -95,8 +101,13 @@ ggplot(dataNoDispSimple %>% mutate(meanA2 = meanA) %>%
   geom_point(aes(x=m, y=fractionPatches, col=meanA), alpha=0.5) + 
   aes(x=m, y=fractionPatchesPredicted, col=meanA, lty=as_factor(it)) + #,,  
   geom_line(show.legend = F) + 
-  facet_grid(cols=vars(n)) #+ 
-  #geom_abline(slope=1, intercept = 0)
+  facet_grid(cols=vars(n)) +
+  labs(x="nr of persisting species, m", 
+       y="fraction of patches occupied, f(m)", 
+       col="a")
+
+ggsave(paste0("../figures/fm.pdf"), width=6, height = 3, 
+       device = "pdf")
 
 ## Analytical predictions -----
 #Case where i is extinct w/o dispersal
@@ -113,10 +124,9 @@ Prob1 <- dataNoDisp %>%
                          mutate(ri=sample(x=trunc_dist(pdfRs, direction="down", q=1e-2+1-m/.y)$x, size=1, 
                                           prob = trunc_dist(pdfRs, direction="down", q=1e-2+1-m/.y)$y/sum(trunc_dist(pdfRs, direction="down", q=1e-2+1-m/.y)$y), 
                                           replace = T)))) %>%#sample from distribution of R
-  mutate(Ni = pmap(., function(d, NTotalKPredicted, meanA, samples, ...){
+  mutate(samples = pmap(., function(d, NTotalKPredicted, meanA, samples, ...){
     samples %>% mutate(Ni=d*NTotalKPredicted/(meanA*NTotalMPredicted-ri))})) %>% #compute Ni when Ni0=0
-  mutate(ProbNi = pmap_dbl(., function(n, Ni, ...){ #prob 
-                           sum(Ni>extinctionThreshold)/sum(Ni>0)})) %>%#only consider cases where Ni>0, b/c Ni<0 means Ni0>0 (which we're not interested in here)
+  mutate(ProbNi = map_dbl(samples, ~sum(.x$Ni>extinctionThreshold)/sum(.x$Ni>0))) %>%#only consider cases where Ni>0, b/c Ni<0 means Ni0>0 (which we're not interested in here)
   mutate(nrPatchesM = map2(nrPatchesM, n, ~.x %>%
                              mutate(probNi0Ext = fractionPatchesPredicted*(1-m/.y)))) %>%#add proba that Ni is absent from patches with m sp (w/o disp)
   mutate(ProbNi0Ext = map_dbl(nrPatchesM, ~sum(.x$probNi0Ext))) #overall proba across all patches
@@ -128,16 +138,36 @@ ggplot(Prob1) +
   geom_point() + 
   facet_grid(cols=vars(n)) +
   labs(x=expression(paste("log"[10],"(d)")), 
-       y="Patch occupancy focal sp, exclusion w/o dispersal", col="a")
+       y="Patch occupancy sp i, \n exclusion w/o dispersal", col="a")
+
+ggsave(paste0("../figures/PNiExcl.pdf"), width=6, height = 3, 
+       device = "pdf")  
+
+#Now probability for extinction w/o disp. (theory and sims)
+dataNoDisp <- data %>%
+  select(n, d, p, meanA, rep, NHat) %>%
+  filter(d==min(d), meanA>0) %>%
+  select(-d) %>%
+  mutate(fractionExct = map_dbl(NHat, ~.x %>%
+                          filter(sp==1, density<extinctionThreshold)%>%
+                          nrow)/p) %>%
+  left_join(Prob1%>%filter(d==min(d))%>%select(-d), 
+            by=c("meanA", "rep", "p", "n"))
   
-ggplot(Prob1) + 
+ggplot(dataNoDisp) + 
   theme_bw() +
+  scale_linetype_manual(values=rep("solid", 1000)) + 
   scale_color_gradient(low = "yellow", high = "red") +
-  aes(x=log10(d), y=ProbNi0Ext, col=meanA) + 
-  geom_point() + 
+  geom_point(aes(x=meanA, y=fractionExct, ), alpha=0.5) + 
+  aes(x=meanA, y=ProbNi0Ext, lty=as.factor(rep)) + #,,  
+  geom_line(show.legend = F) + 
+  #scale_color_gradient(low = "yellow", high = "red") +
   facet_grid(cols=vars(n)) +
-  labs(x=expression(paste("log"[10],"(d)")), 
-       y="Probability that i is extinct w/o disp.", col="a")
+  labs(x="a", 
+       y="Fraction of patches where i \n gets excluded w/o disp.", col="a")
+
+ggsave(paste0("../figures/PNi0Excl.pdf"), width=6, height = 3, 
+       device = "pdf")  
 
 #  mutate(r = map(ri, ~mean(.x)),  #compute mean and mean of inverse
 #  rInv = map(ri, ~mean(1/.x))) %>%
@@ -146,6 +176,7 @@ ggplot(Prob1) +
 #mutate(Ni = pmap(., function(meanA, NiWeak, NiStrong,...){NiWeak*(meanA<0.5)+NiStrong*(meanA>=0.5)})) %>%#get proper Ni according to meanA
 #  mutate(ProbNi0Zero = pmap_dbl(., function(n, mProbs, ...){
 #sum(mProbs[1:(n-1)]*(1-c(1:(n-1))/n)) })) 
+
 
 
 # LEFTOVERS ---------
