@@ -1,6 +1,6 @@
 
 # CALCULATIONS ------
-data <- expand_grid(n = c(4, 6, 8), meanA = c(0.2, 0.4, 0.8), #, 6
+data <- expand_grid(n = c(4), meanA = c(0.2, 0.4, 0.8), #, 6
                     d = seq(-8,-4, length.out=2), #6
                     sdA = 0, p = 100, rep = c(1:3)) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
   #Make parameters
@@ -67,7 +67,7 @@ dataNoDisp <- data %>%
     mutate(m=as.numeric(as.character(m))) %>%
     rowwise() %>%
     mutate(meanRPer = get_mean_trunc(pdfRs, q=1-(m/n), ditch="down"),#predicted mean r of persisting sp
-           meanRExc = (n*meanR - m*meanRPer)/(n-m),#predicted mean r of excluded
+           meanRExc = get_mean_trunc(pdfRs, q=1-(m/n), ditch="up"),#predicted mean r of excluded
            fractionPatchesPredicted = get_fraction_m(meanA=meanA, m=m, n=n), #predicted total density in a patch of m persisting sp
            NTotalMPredicted = get_N_total(meanA=meanA, n=m, r=meanRPer))})) %>%#total density for a patch with m species
   mutate(NTotalKPredicted = p/n*map_dbl(nrPatchesM, ~sum(.x$fractionPatchesPredicted * .x$NTotalMPredicted)))
