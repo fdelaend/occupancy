@@ -67,7 +67,7 @@ dataNoDisp <- data %>%
     nrPatchesM %>%
     mutate(m=as.numeric(as.character(m))) %>%
     rowwise() %>%
-    mutate(meanRPer = get_mean_trunc(pdfRs, q=1-(m/n)),#predicted mean r of persisting sp
+    mutate(meanRPer = get_mean_trunc(pdfRs, q=1-(m/n), ditch="down"),#predicted mean r of persisting sp
            meanRExc = (n*meanR - m*meanRPer)/(n-m),#predicted mean r of excluded
            fractionPatchesPredicted = get_fraction_m(meanA=meanA, m=m, n=n), #predicted total density in a patch of m persisting sp
            NTotalMPredicted = get_N_total(meanA=meanA, n=m, r=meanRPer))})) %>%#total density for a patch with m species
@@ -116,13 +116,13 @@ Prob1 <- dataNoDisp %>%
   expand_grid(d=seq(-6,-4, length.out=6), sampleSize = 100) %>%
   mutate(d=10^d) %>%
   mutate(samples = map2(nrPatchesM, sampleSize, #sample m
-                       ~tibble(m=sample(x=.x$m, size=.y, 
+                       ~tibble(m = sample(x=.x$m, size=.y, 
                                prob = .x$fractionPatchesPredicted, replace=T)))) %>% 
   mutate(samples = map2(samples, nrPatchesM, ~left_join(.x, .y, by="m", multiple="all")%>%
                           select(all_of(c("m", "NTotalMPredicted"))))) %>%
   mutate(samples = map2(samples, n, ~.x %>% rowwise %>% 
-                         mutate(ri=sample(x=trunc_dist(pdfRs, direction="down", q=1e-2+1-m/.y)$x, size=1, 
-                                          prob = trunc_dist(pdfRs, direction="down", q=1e-2+1-m/.y)$y/sum(trunc_dist(pdfRs, direction="down", q=1e-2+1-m/.y)$y), 
+                         mutate(ri=sample(x=trunc_dist(pdfRs, ditch="up", q=1e-2+1-m/.y)$x, size=1, 
+                                          prob = trunc_dist(pdfRs, ditch="up", q=1e-2+1-m/.y)$y/sum(trunc_dist(pdfRs, ditch="up", q=1e-2+1-m/.y)$y), 
                                           replace = T)))) %>%#sample from distribution of R
   mutate(samples = pmap(., function(d, NTotalKPredicted, meanA, samples, ...){
     samples %>% mutate(Ni=d*NTotalKPredicted/(meanA*NTotalMPredicted-ri))})) %>% #compute Ni when Ni0=0
