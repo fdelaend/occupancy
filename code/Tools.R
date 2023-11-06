@@ -206,6 +206,11 @@ get_mean_trunc <- function(pdfFitted, q=0.5, ditch="up"){
   sum(pdfTrunc$x*pdfTrunc$y)/sum(pdfTrunc$y)
 }
 
+#minimal mean R the persisting sp should have
+minimalRMeanM <- function(a, m, n, r){
+  (1-a+a*m)*n*r/(m*(1-a+a*n))
+} 
+
 #probability of extinction w/o dispersal (for visualisation purposes)
 #feas = vector w feasibilities of all m for which 1<=m<=n
 get_prob_ext_wo <- function(n, feas){
