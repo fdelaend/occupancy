@@ -1,15 +1,13 @@
 
 # CALCULATIONS ------
-data <- expand_grid(n = c(4, 6), meanA = c(0.2, 0.4, 0.8), #, 6; 0.4, 
+data <- expand_grid(n = c(4, 6, 8), meanA = c(0.2, 0.4, 0.8), #, 6; 0.4, 
                     d = seq(-8,-4, length.out=2), # 6
                     sdA = 0, p = 100, rep = c(1:3)) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
   #Make parameters
   mutate(d = 10^d) %>%
   mutate(A = pmap(., function(meanA, sdA, n, ...) 
-    matrix(data = rnorm(n^2, meanA, sdA), ncol = n))) %>% 
-  mutate(A = map(A, ~make_symmetric(.x))) %>% #make symmetric and ditch diagonal
-  mutate(A = map(A, ~ set_diagonal(A=.x, d=1))) %>% #set self to 1
-  #mutate(feasibility = map_dbl(A, ~feasibility(.x))) %>% #compute feasibility
+    matrix(data = rnorm(n^2, meanA, sdA), ncol = n) %>% #make symmetric and ditch diagonal; set self to 1
+      make_symmetric() %>% set_diagonal(d=1))) %>% 
   mutate(A = pmap(., make_block_diagonal)) %>% #make A spatial
   mutate(R = pmap(., make_R_spatial)) %>% #make spatial R (note that the emigration is subtracted later so this is the real local R)
   mutate(D = pmap(., make_D)) %>% #make dispersal matrix
@@ -26,9 +24,9 @@ data <- expand_grid(n = c(4, 6), meanA = c(0.2, 0.4, 0.8), #, 6; 0.4,
                 meanRPer = sum(R*present)/sum(present)) %>%
       mutate(m = fct_expand(m, as.character(c(1:n)))) %>%
       group_by(m, .drop=F) %>%
-      summarize(nrPatches = n(),
-                NTotal = mean(NTotal),
-                meanRPer = mean(meanRPer)) %>%
+      summarize(nrPatches = n(),#nr of patches with m sp.
+                NTotal = mean(NTotal),#total biomass in a patch with m sp.
+                meanRPer = mean(meanRPer)) %>% #mean r of persisting sp.
       ungroup()})) %>%
   #2/proportion of patches in which all n species persist
   mutate(propPatchesN = 1/p*map2_dbl(summaryM, n, ~ (.x %>% filter(m==.y))$nrPatches)) %>%
@@ -71,7 +69,8 @@ dataNoDisp <- data %>%
     mutate(meanRPerPredicted = get_mean_trunc(pdfRs, q=1-(m/n), ditch="down"),#predicted mean r of persisting sp
            meanRExcPredicted = get_mean_trunc(pdfRs, q=1-(m/n), ditch="up"),#predicted mean r of excluded sp
            fractionPatchesPredicted = get_fraction_m(meanA=meanA, m=m, n=n), #predicted total density in a patch of m persisting sp
-           NTotalPredicted = get_N_total(meanA=meanA, n=m, r=meanRPerPredicted))})) %>%#total density for a patch with m species
+           NTotalPredicted = get_N_total(meanA=meanA, n=m, r=meanRPerPredicted),
+           NTotalPredictedWithoutI = (m-1)/m*get_N_total(meanA=meanA, n=m, r=meanRPerPredicted))})) %>%#total density for a patch with m species
   mutate(NTotalKPredicted = p/n*map_dbl(summaryM, ~sum(.x$fractionPatchesPredicted * .x$NTotalPredicted)))
 
 ## showcase accuracy of NtotalK ----
@@ -124,6 +123,8 @@ ggplot(dataNoDispSimple %>% mutate(meanA2 = meanA) %>%
        y="mean r of persisting species", 
        col="a")
 
+ggsave(paste0("../figures/rm.pdf"), width=6, height = 3, 
+       device = "pdf")
 #good prediction, except when m=1 and a is small, which is a very rare combination.
 
 ## Analytical predictions -----

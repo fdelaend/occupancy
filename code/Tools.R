@@ -162,14 +162,6 @@ get_N0i <- function(a=0.5, n=10, r=1, ri=0.1){
   (a*(n - 1)*r - ri*(a*(n - 2) + 1))/((a - 1)*(a*(n - 1) + 1))
 }
 
-#get sum of densities across patches of a species, in case there is no dispersal
-get_NTotalK <- function(n=10, meanA=0.5, p=100){
-  total <- 0
-  for (m in c(1:n)){
-    total <- total + get_fraction_m(meanA=meanA, m=m, n=n)*get_N_total(meanA=meanA, n=m)}
-  1/n*p*total
-}
-
 #get Ni when N0i is equal to zero (for at least the focal sp i)
 #SumN0j is a RV: it is the sum of biomass across species in a patch, 
 #where m species (m<n) coexist when there is no dispersal.
@@ -207,8 +199,8 @@ get_mean_trunc <- function(pdfFitted, q=0.5, ditch="up"){
 }
 
 #minimal mean R the persisting sp should have
-minimalRMeanM <- function(a, m, n, r){
-  (1-a+a*m)*n*r/(m*(1-a+a*n))
+minimalRMeanM <- function(a=0.8, m=1, n=4, r=1){
+  ((1 + a*(-1 + m))*n*r)/(m + a*m*(-1 + n))
 } 
 
 #probability of extinction w/o dispersal (for visualisation purposes)
