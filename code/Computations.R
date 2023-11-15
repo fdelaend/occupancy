@@ -66,11 +66,10 @@ dataNoDisp <- data %>%
     summaryM %>%
     mutate(m=as.numeric(as.character(m))) %>%
     rowwise() %>%
-    mutate(meanRPerPredicted = get_mean_trunc(pdfRs, q=1-(m/n), ditch="down"),#predicted mean r of persisting sp
-           meanRExcPredicted = get_mean_trunc(pdfRs, q=1-(m/n), ditch="up"),#predicted mean r of excluded sp
+    mutate(meanRPerPredicted = RMeanM(a=meanA, m=m, n=n, r=1.02),#predicted mean r of persisting sp
+           meanRExcPredicted = (-meanRPerPredicted*m+n*1.02)/(n-m),#predicted mean r of excluded sp
            fractionPatchesPredicted = get_fraction_m(meanA=meanA, m=m, n=n), #predicted total density in a patch of m persisting sp
-           NTotalPredicted = get_N_total(meanA=meanA, n=m, r=meanRPerPredicted),
-           NTotalPredictedWithoutI = (m-1)/m*get_N_total(meanA=meanA, n=m, r=meanRPerPredicted))})) %>%#total density for a patch with m species
+           NTotalPredicted = get_N_total(meanA=meanA, n=m, r=meanRPerPredicted))})) %>%#total density for a patch with m species
   mutate(NTotalKPredicted = p/n*map_dbl(summaryM, ~sum(.x$fractionPatchesPredicted * .x$NTotalPredicted)))
 
 ## showcase accuracy of NtotalK ----

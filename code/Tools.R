@@ -199,8 +199,9 @@ get_mean_trunc <- function(pdfFitted, q=0.5, ditch="up"){
 }
 
 #minimal mean R the persisting sp should have
-minimalRMeanM <- function(a=0.8, m=1, n=4, r=1){
-  ((1 + a*(-1 + m))*n*r)/(m + a*m*(-1 + n))
+RMeanM <- function(a=0.8, m=1, n=4, r=1.01, rmax=1.8){
+  below <- (2*(1 + a*(-1 + m))*n*r)/(m*(2 + a*(-2 + m + n))) #if cut<rmax
+  above <-  rmax/2#if cut>rmax
 } 
 
 #probability of extinction w/o dispersal (for visualisation purposes)
