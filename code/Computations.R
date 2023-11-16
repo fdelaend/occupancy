@@ -1,8 +1,8 @@
 
 # CALCULATIONS ------
-data <- expand_grid(n = c(4, 6, 8), meanA = c(0.2, 0.4, 0.8), #, 6; 0.4, 
+data <- expand_grid(n = c(4, 8), meanA = c(0.2, 0.8), #, 6; 0.4, 
                     d = seq(-8,-4, length.out=2), # 6
-                    sdA = 0, p = 100, rep = c(1:3)) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
+                    sdA = 0, p = 50, rep = c(1:3)) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
   #Make parameters
   mutate(d = 10^d) %>%
   mutate(A = pmap(., function(meanA, sdA, n, ...) 
@@ -37,7 +37,20 @@ data <- expand_grid(n = c(4, 6, 8), meanA = c(0.2, 0.4, 0.8), #, 6; 0.4,
       summarize(NTotalK = sum(density))})) #so you can check it's comparable across sp
 
 ## fit distribution to r
-Rs     <- data %>% select(R) %>% unnest(cols=R)
+Rs     <- data %>% filter(d==min(d), meanA==0.8, rep==1) %>% select(n, R, NHat) %>% 
+  mutate(NHat = map2(R, NHat, ~ .y %>% mutate(R=.x))) %>%
+  #filter(n==6) %>%
+  select(-R) %>%
+  unnest(NHat) %>%
+  select(-density, -sp)
+
+ggplot(Rs) + 
+  theme_bw() +
+  aes(R, col=as.factor(location)) + 
+  geom_density(show.legend=F) + 
+  geom_density(aes(R), show.legend=F, lwd=2, col="black") + 
+  facet_grid(cols=vars(n))
+
 pdfRs  <- density(Rs$R, from=0)
 meanR  <- sum(pdfRs$x*pdfRs$y)/sum(pdfRs$y)#grant mean of R
 # PLOTS ------
@@ -81,7 +94,8 @@ ggplot(dataNoDisp) +
   geom_abline(slope=1, intercept=0) + 
   labs(x=expression(paste(Sigma[{k}],"N"[{"0,i"}]^{(k)},~"simulated")), 
        y=expression(paste(Sigma[{k}],"N"[{"0,i"}]^{(k)},~"analytical")), 
-       col="a")
+       col="a") #+
+  #facet_grid(cols=vars(n))
 
 ggsave(paste0("../figures/Nk.pdf"), width=3, height = 2, 
        device = "pdf")
