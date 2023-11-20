@@ -199,8 +199,9 @@ get_mean_trunc <- function(pdfFitted, q=0.5, ditch="up"){
 }
 
 #mean R of the persisting sp
-RMeanM <- function(a=0.8, m=1, n=4, r=1.01){
-  (2*(1 + a*(-1 + m))*n*r)/(m*(2 + a*(-2 + m + n))) 
+#x = factor to divide a*Nt by in order to get the mean
+get_RMeanM <- function(a=0.8, m=1, n=4, r=1.01, x=2.2){
+  ((1 + a*(-1 + m))*n*r*x)/(m*(a*(n + m*(-1 + x) - x) + x)) 
 } 
 #mean R of the persisting sp, complicated version
 #RMeanM <- function(a=0.8, m=1, n=4, r=1.01){
