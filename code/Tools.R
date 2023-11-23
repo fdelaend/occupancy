@@ -215,6 +215,19 @@ get_mean_trunc <- function(pdfFitted, q=0.5, ditch="up"){
 get_RMeanM <- function(a=0.8, m=1, n=4, r=1.01, x=2.2){
   ((1 + a*(-1 + m))*n*r*x)/(m*(a*(n + m*(-1 + x) - x) + x)) 
 } 
+
+#sample ri's from a truncated dist
+# PDF = a pdf, with $x the values and $y the density
+# cutoff = threshold for truncation
+# ditch = whether to ditch everything below or above
+sample_ri <- function(samplesize=1, PDF, cutoff, ditch="below", ...){
+  ditchBelow <- sample(x = PDF$x[which(PDF$x>cutoff)], size=1, 
+         prob = PDF$y[which(PDF$x>cutoff)], replace = T)
+  ditchAbove <- sample(x = PDF$x[which(PDF$x<cutoff)], size=1, 
+                       prob = PDF$y[which(PDF$x<cutoff)], replace = T)
+  (ditch=="below")*ditchBelow + (ditch=="above")*ditchAbove
+}
+
 #mean R of the persisting sp, complicated version
 #RMeanM <- function(a=0.8, m=1, n=4, r=1.01){
 #  ((sqrt(3)*sqrt((m + a*(-1 + m)*m)^2*(3*(2 + a*(-2 + m + n))^2 + 2*a*n*(6 + a*(-6 + m + 5*n))*r + 3*a^2*n^2*r^2)) + 
