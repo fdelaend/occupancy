@@ -162,11 +162,23 @@ get_N0i <- function(a=0.5, n=10, r=1, ri=0.1){
   (a*(n - 1)*r - ri*(a*(n - 2) + 1))/((a - 1)*(a*(n - 1) + 1))
 }
 
-#get Ni when N0i is equal to zero (for at least the focal sp i)
-#SumN0j is a RV: it is the sum of biomass across species in a patch, 
-#where m species (m<n) coexist when there is no dispersal.
-get_Ni_N0iEqualTo0 <- function(d=1e-4, NTotalK=10, ri=1, meanA=0.5, SumN0j){
-  (d*NTotalK)/(ri - meanA*SumN0j)
+#get N1i when i is excluded w/o dispersal
+#NTotalK = total abundance of i across all patches without the focal patch
+#ri = r of i, given that it gets excluded w/o dispersal
+#a = interaction strength
+#SumN0j = abundance of all species 
+get_N1iExc <- function(NTotalK=10, ri=1, a=0.5, SumN0j){
+  NTotalK/(a*SumN0j - ri)
+}
+
+#get N1i when i persists w/o dispersal
+#a = interaction strength
+#n and m: nr of species in the regional pool and in the focal patch
+#meanN1iExc = mean of N1iExc across species
+#meanEpsN0i = mean of EpsN0i across species
+#EpsN0i = epsilon for species i, given that it persists w/o dispersal
+get_N1iPer <- function(a=0.5, n=4, m=1, EpsN0i, meanN1iExc, meanEpsN0i){
+  (a*((a-1)*meanN1iExc*(n-m)-m*meanEpsN0i+m*EpsN0i-2*EpsN0i)+EpsN0i)/((a-1)*(a*(m-1)+1))
 }
 
 #make a distribution of nr of species in a patch in

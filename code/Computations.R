@@ -1,7 +1,7 @@
 
 # CALCULATIONS ------
-data <- expand_grid(n = c(4, 6, 8), meanA = c(0.2, 0.6, 0.8), #, 6; 0.4, 
-                    d = seq(-8,-4, length.out=2), # 6
+data <- expand_grid(n = c(4, 6, 8), meanA = c(0.2, 0.4, 0.6, 0.8), #, 6; 0.4, 
+                    d = seq(-8,-4, length.out=6), # 6
                     sdA = 0, p = 100, rep = c(1:3)) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
   #Make parameters
   mutate(d = 10^d) %>%
@@ -79,10 +79,11 @@ dataNoDisp <- data %>%
     summaryM %>%
     mutate(m=as.numeric(as.character(m))) %>%
     rowwise() %>%
+    mutate(fractionPatchesPredicted = get_fraction_m(meanA=meanA, m=m, n=n)) %>% #predicted total density in a patch of m persisting sp
+    ungroup() %>%
     mutate(meanRPerPredicted = get_RMeanM(a=meanA, m=m, n=n, r=1.02),#predicted mean r of persisting sp
            meanRExcPredicted = (-meanRPerPredicted*m+n*1.02)/(n-m),#predicted mean r of excluded sp
-           fractionPatchesPredicted = get_fraction_m(meanA=meanA, m=m, n=n), #predicted total density in a patch of m persisting sp
-           NTotalPredicted = get_N_total(meanA=meanA, n=m, r=meanRPerPredicted))})) %>%#total density for a patch with m species
+           NTotalPredicted = get_N_total(meanA=meanA, n=m, r=meanRPerPredicted))})) %>% #total density for a patch with m species
   mutate(NTotalKPredicted = p/n*map_dbl(summaryM, ~sum(.x$fractionPatchesPredicted * .x$NTotalPredicted)))
 
 ## showcase accuracy of NtotalK ----
@@ -138,32 +139,43 @@ ggplot(dataNoDispSimple %>% mutate(meanA2 = meanA) %>%
 
 ggsave(paste0("../figures/rm.pdf"), width=6, height = 3, 
        device = "pdf")
-#good prediction, except when m<=2. 
+#good prediction, except when m<=2 and a is strong. 
 #Changing the uniform approximation to a triangular one
-#does not improve things. So I suspect there is something 
+#does not seem to improve things (but double-check). So I suspect there is something 
 #fundamentally off at m is small. 
 
 ## Analytical predictions -----
-#Case where i is extinct w/o dispersal
-Prob1 <- dataNoDisp %>%
-  select(-R) %>%
+Prob <- dataNoDisp %>%
   mutate(sampleSize = 100) %>%
   mutate(samples = map2(summaryM, sampleSize, #sample m
                        ~tibble(m = sample(x=.x$m, size=.y, 
                                prob = .x$fractionPatchesPredicted, replace=T)))) %>% 
   mutate(samples = map2(samples, summaryM, ~left_join(.x, .y, by="m", multiple="all")%>% #get NTotalPredicted that matches the sampled m
-                          select(all_of(c("m", "NTotalPredicted"))))) %>%
-  mutate(samples = map2(samples, meanA, ~.x %>% rowwise %>% 
-                         mutate(ri=sample(x = pdfRs$x[which(pdfRs$x<.y*NTotalPredicted)], size=1, 
-                                          prob = pdfRs$y[which(pdfRs$x<.y*NTotalPredicted)], 
-                                          replace = T)))) %>%#sample from distribution of R such that IGR<0 (so truncate at meanA*NTotalPredicted)
+                          select(all_of(c("m", "NTotalPredicted", "meanRPerPredicted", "meanRExcPredicted"))))) %>%
+  mutate(samples = map2(samples, meanA, ~.x %>%
+                          rowwise() %>%
+                          #sample from distribution of R such that IGR<0 or >0 
+                          mutate(riExc=sample(x = pdfRs$x[which(pdfRs$x<.y*NTotalPredicted)], 
+                                                 size=1, prob = pdfRs$y[which(pdfRs$x<.y*NTotalPredicted)], replace = T),
+                                 riPer=sample(x = pdfRs$x[which(pdfRs$x>.y*NTotalPredicted)], 
+                                                 size=1, prob = pdfRs$y[which(pdfRs$x>.y*NTotalPredicted)], replace = T)) %>%
+                          ungroup() %>%
+                          #N0i; N in case the sp persists locally w/o dispersal
+                          mutate(N0i=get_N0i(a=.y, n=m, r=meanRPerPredicted, ri=riPer)))) %>%
   expand_grid(d=seq(-6,-4, length.out=6)) %>%
   mutate(d=10^d) %>%
-  mutate(samples = pmap(., function(d, NTotalKPredicted, meanA, samples, ...){
-    samples %>% mutate(Ni=d*NTotalKPredicted/(meanA*NTotalPredicted-ri))})) %>% #compute Ni 
-  mutate(ProbNi = map_dbl(samples, ~sum(.x$Ni>extinctionThreshold)/length(.x$Ni))) %>%#Compute probability that Ni>0
+  mutate(samples = pmap(., function(d, p, NTotalKPredicted, meanA, samples, ...){
+    samples %>% mutate(N1iExc=get_N1iExc(NTotalK=NTotalKPredicted, ri=riExc, a=meanA, NTotalPredicted), #N1i for when i is extinct w/o dispersal
+                       NiExc=d*N1iExc,#Ni for when i is extinct w/o dispersal
+                       #meanN1iExc = mean(N1iExc), NOT CORRECT, is across sp..
+                       Eps = NTotalKPredicted/p*(p-1)-(p-1)*N0i,#mean should be < 0
+                       meanEps = mean(Eps), #which it is
+                       EpsN0i = Eps/N0i,
+                       #meanEpsN0i = mean(EpsN0i), NOT CORRECT, is across sp..
+                       N1iPer = 5)})) %>% #Eps/N0i; mean sh not necessarily be < 0
+  mutate(ProbNi = map_dbl(samples, ~sum(.x$NiExc>extinctionThreshold)/length(.x$NiExc))) %>%#Compute probability that Ni>0
   mutate(summaryM = map2(summaryM, n, ~.x %>%
-                             mutate(probNi0Ext = fractionPatchesPredicted*(1-m/.y)))) %>%#add proba that Ni is absent from patches with m sp (w/o disp)
+                             mutate(probNi0Ext = fractionPatchesPredicted*(1-m/.y)))) %>%#proba that Ni is absent from patches with m sp (w/o disp)
   mutate(ProbNi0Ext = map_dbl(summaryM, ~sum(.x$probNi0Ext))) #overall proba across all patches
   
 ggplot(Prob1) + 
