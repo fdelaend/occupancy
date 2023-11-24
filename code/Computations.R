@@ -1,7 +1,7 @@
 
 # CALCULATIONS ------
 data <- expand_grid(n = c(4, 6, 8), meanA = c(0.2, 0.4, 0.6, 0.8), #, 6; 0.4, 
-                    d = seq(-8,-4, length.out=2), # 6
+                    d = seq(-6,-4, length.out=6), # 6
                     sdA = 0, p = 100, rep = c(1:3)) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
   #Make parameters
   mutate(d = 10^d) %>%
@@ -62,7 +62,7 @@ ggplot(data) +
   aes(x=log10(d), y=propPatchesN, col=meanA) + 
   geom_point() +
   labs(x=expression(paste("log"[10],"(d)")), 
-       y="Patch occupancy (fraction)", col="a") +
+       y="Patch occupancy, simulated", col="a") +
   #geom_line(aes(x=log10(d), y=feasibility, col=meanA,
   #              group=interaction(meanA, rep))) + 
   facet_grid(cols=vars(n))
@@ -145,7 +145,7 @@ ggsave(paste0("../figures/rm.pdf"), width=6, height = 3,
 #fundamentally off at m is small. 
 
 ## Analytical predictions -----
-Prob <- dataNoDisp %>%
+prob <- dataNoDisp %>%
   filter(rep==1) %>%
   mutate(sampleSize = 100) %>%
   mutate(samples = pmap(., function(summaryM, sampleSize, meanA, NTotalKPredicted, p, ...){
@@ -160,30 +160,57 @@ Prob <- dataNoDisp %>%
              N1iExc=get_N1iExc(NTotalK=NTotalKPredicted, ri=riExc, a=meanA, NTotalPredicted),
              Eps = NTotalKPredicted/p*(p-1)-(p-1)*N0i,
              EpsN0i = Eps/N0i)})) %>%
-  #NOW group by m to compute the means of N1iExc and EpsN0i
-  expand_grid(d=seq(-6,-4, length.out=6)) %>%
+  mutate(means = map(samples, ~ .x %>% group_by(m) %>% #mean across samples with the same m to mimick mean across species 
+                       summarize(meanEpsN0i = mean(EpsN0i, na.rm=T),
+                                 meanN1iExc=mean(N1iExc, na.rm=T),
+                                 meanEps = mean(Eps, na.rm=T)))) %>%
+  mutate(samples = map2(samples, means, ~.x %>% #add means to samples
+                          left_join(.y, by="m"))) %>%
+  expand_grid(d = seq(-6,-4, length.out=6)) %>%
   mutate(d=10^d) %>%
-  mutate(samples = pmap(., function(d, p, NTotalKPredicted, meanA, samples, ...){
-    samples %>% mutate(NiExc=d*N1iExc,#Ni for when i is extinct w/o dispersal
-                       #meanN1iExc = mean(N1iExc), NOT CORRECT, is across sp..
-                       #meanEps = mean(Eps), #NOT CORRECT, is across sp..
-                       #meanEpsN0i = mean(EpsN0i), NOT CORRECT, is across sp..
-                       N1iPer = 5)})) %>% 
-  mutate(ProbNi = map_dbl(samples, ~sum(.x$NiExc>extinctionThreshold)/length(.x$NiExc))) %>%#Compute probability that Ni>0
+  mutate(samples = pmap(., function(samples, d, meanA, n, ...){ samples %>%
+      mutate(N1iPer = get_N1iPer(a=meanA, n=n, m=m, EpsN0i, #N1i when i persists w/o disp.
+                                 meanN1iExc, meanEpsN0i), 
+             NiExc = d*N1iExc, #Ni when i is excluded w/o disp.
+             NiPer = N0i+d*N1iPer)})) %>% #Ni when i persists w/o disp.
+  mutate(probExc = map_dbl(samples, ~sum(.x$NiExc>extinctionThreshold)/length(.x$NiExc)), #Compute probabilities that > threshold
+         probPer = map_dbl(samples, ~sum(.x$NiPer>extinctionThreshold)/length(.x$NiPer))) %>%
   mutate(summaryM = map2(summaryM, n, ~.x %>%
-                             mutate(probNi0Ext = fractionPatchesPredicted*(1-m/.y)))) %>%#proba that Ni is absent from patches with m sp (w/o disp)
-  mutate(ProbNi0Ext = map_dbl(summaryM, ~sum(.x$probNi0Ext))) #overall proba across all patches
+                             mutate(probN0iExt = fractionPatchesPredicted*(1-m/.y)))) %>%#proba that Ni is absent from patches with m sp (w/o disp)
+  mutate(probN0iExt = map_dbl(summaryM, ~sum(.x$probN0iExt)), #overall proba across all patches
+         probN0iPer = 1-probN0iExt,
+         prob = (probExc*probN0iExt + probPer*probN0iPer)^n) #grant prob
   
-ggplot(Prob1) + 
+ggplot(prob) + 
   theme_bw() +
   scale_color_gradient(low = "yellow", high = "red") +
-  aes(x=log10(d), y=ProbNi, col=meanA) + 
+  aes(x=log10(d), y=prob, col=meanA) + 
   geom_point() + 
   facet_grid(cols=vars(n)) +
   labs(x=expression(paste("log"[10],"(d)")), 
-       y="Patch occupancy sp i, \n exclusion w/o dispersal", col="a")
+       y="Patch occupancy, analytical", col="a")
 
-ggsave(paste0("../figures/PNiExcl.pdf"), width=6, height = 3, 
+ggsave(paste0("../figures/Analytical.pdf"), width=6, height = 3, 
+       device = "pdf")  
+
+#Now add simulated data to the predictions
+dataSel <- data %>% #selection of data
+  select(all_of(c("n", "meanA", "d", "propPatchesN"))) %>%
+  left_join(prob, by=c("n", "meanA", "d"))
+
+ggplot(dataSel %>% mutate(meanA2 = meanA) %>%
+         unite("it", rep, meanA2)) + 
+  theme_bw() +
+  scale_linetype_manual(values=rep("solid", 1000)) + 
+  scale_color_gradient(low = "yellow", high = "red") +
+  geom_point(aes(x=log10(d), y=propPatchesN, col=meanA)) + 
+  geom_line(aes(x=log10(d), y=prob, col=meanA, lty=as_factor(it)), 
+            show.legend = F) +
+  facet_grid(cols=vars(n)) +
+  labs(x=expression(paste("log"[10],"(d)")), 
+       y="Patch occupancy", col="a")
+
+ggsave(paste0("../figures/feasPred.pdf"), width=6, height = 3, 
        device = "pdf")  
 
 #Now probability for extinction w/o disp. (theory and sims)
@@ -194,15 +221,15 @@ dataNoDisp <- data %>%
   mutate(fractionExct = map_dbl(NHat, ~.x %>%
                           filter(sp==1, density<extinctionThreshold)%>%
                           nrow)/p) %>%
-  left_join(Prob1%>%filter(d==min(d))%>%select(-d), 
+  left_join(prob%>%filter(d==min(d))%>%select(-d), 
             by=c("meanA", "rep", "p", "n"))
-  
+
 ggplot(dataNoDisp) + 
   theme_bw() +
   scale_linetype_manual(values=rep("solid", 1000)) + 
   scale_color_gradient(low = "yellow", high = "red") +
-  geom_point(aes(x=meanA, y=fractionExct, ), alpha=0.5) + 
-  aes(x=meanA, y=ProbNi0Ext, lty=as.factor(rep)) + #,,  
+  geom_point(aes(x=meanA, y=fractionExct), alpha=0.5) + 
+  aes(x=meanA, y=probN0iExt, lty=as.factor(rep)) + #,,  
   geom_line(show.legend = F) + 
   #scale_color_gradient(low = "yellow", high = "red") +
   facet_grid(cols=vars(n)) +
@@ -212,30 +239,3 @@ ggplot(dataNoDisp) +
 ggsave(paste0("../figures/PNi0Excl.pdf"), width=6, height = 3, 
        device = "pdf")  
 
-#  mutate(r = map(ri, ~mean(.x)),  #compute mean and mean of inverse
-#  rInv = map(ri, ~mean(1/.x))) %>%
-#  mutate(m = map2(mProbs, sampleSize, ~sample(x=c(1:length(.x)), size=.y, prob=.x, replace=T))) %>% #sample m's
-#  mutate(NiWeak = pmap(., get_density_weak)) %>% #compute Ni for weak interactions
-#mutate(Ni = pmap(., function(meanA, NiWeak, NiStrong,...){NiWeak*(meanA<0.5)+NiStrong*(meanA>=0.5)})) %>%#get proper Ni according to meanA
-#  mutate(ProbNi0Zero = pmap_dbl(., function(n, mProbs, ...){
-#sum(mProbs[1:(n-1)]*(1-c(1:(n-1))/n)) })) 
-
-
-
-# LEFTOVERS ---------
-
-
-## total biomass ----
-ggplot(data %>% 
-         mutate(NTotPred = p*get_N_total(mean_a=meanA, d=1, l=n, r=1))) + 
-  scale_linetype_discrete(rep("solid", 100)) +
-  theme_bw() +
-  scale_color_gradient(low = "yellow", high = "red") +
-  aes(x=log10(d), y=NTot, col=meanA) + 
-  labs(x=expression(paste("log"[10],"(d)")), 
-       y="total biomass \n across network", col="a") +
-  geom_point() + 
-  facet_grid(cols=vars(n))
-
-ggsave(paste0("../figures/biomass.pdf"), width=5, height = 2, 
-       device = "pdf")

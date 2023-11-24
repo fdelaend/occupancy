@@ -74,9 +74,9 @@ make_R_spatial <- function(n, p, negative_sign=10000, ...){
   #now make sure the mean r across species is 1 at all patches
   rawRs <- rawRs %*% diag(1/colMeans(rawRs))
   rawRs <- diag(1/rowMeans(rawRs)) %*% rawRs  
+  colnames(rawRs) <- c(1:n)
   #and put everything into a nice format
   Rs     <- as_tibble(rawRs)%>%
-    rename_with(~gsub("V","", .x, fixed = TRUE)) %>% #give correct sign to intrinsic growth rate of consumer
     mutate(location=c(1:p)) %>%
     pivot_longer(!location) %>%
     mutate(value=value*(-1)*name%in%negative_sign + value*(1-name%in%negative_sign))
@@ -228,33 +228,7 @@ sample_ri <- function(samplesize=1, PDF, cutoff, ditch="below", ...){
   (ditch=="below")*ditchBelow + (ditch=="above")*ditchAbove
 }
 
-#mean R of the persisting sp, complicated version
-#RMeanM <- function(a=0.8, m=1, n=4, r=1.01){
-#  ((sqrt(3)*sqrt((m + a*(-1 + m)*m)^2*(3*(2 + a*(-2 + m + n))^2 + 2*a*n*(6 + a*(-6 + m + 5*n))*r + 3*a^2*n^2*r^2)) + 
-#       3*(1 + a*(-1 + m))*m*(2 + a*(-2 + m + n - n*r)))/(2*a*m^2*(3 + a*(-3 + m + 2*n))))
-#} 
-#probability of extinction w/o dispersal (for visualisation purposes)
-#feas = vector w feasibilities of all m for which 1<=m<=n
-get_prob_ext_wo <- function(n, feas){
-  n <- length(feas)
-  probs <- tibble(n=n, m=c(1:n), feas=feas) %>%
-    mutate(prob = feas*(1-m/n))
-  sum(probs$prob)
-}
 
-#value of N1i when persistence w/o dispersal
-# N0i = density of i w/o dispersal
-# m = nr of species coexisting w/o dispersal
-# n = nr of species regionally available
-# N1 = mean of N1j across j that don't persist
-# p = nr of patches
-# SumN0k = total density across whole network for a species (same for all sp)
-# N0Inv = mean of the inverse of N0i
-get_N1i_no_ext_wo <- function(meanA, N0i, m, n, N1, p, SumN0k, 
-                              N0Inv){
-  (-((-1 + meanA)*N0i*(1 + meanA*(m - n)*N1 - p)) + SumN0k + 
-     meanA*(-2 + m + N0i*N0Inv - m*N0i*N0Inv)*SumN0k)/((-1 + meanA)*(1 + meanA*(-1 + m))*N0i)
-}
 
 
 
