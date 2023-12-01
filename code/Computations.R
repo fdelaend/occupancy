@@ -118,7 +118,7 @@ ggplot(dataNoDispSimple %>% mutate(meanA2 = meanA) %>%
   geom_line(show.legend = F) + 
   facet_grid(cols=vars(n)) +
   labs(x="nr of persisting species, m", 
-       y="fraction of patches occupied, f(m)", 
+       y=expression(paste("fraction of patches occupied, f"[m])), 
        col="a")
 
 ggsave(paste0("../figures/fm.pdf"), width=6, height = 3, 
@@ -149,7 +149,7 @@ ggsave(paste0("../figures/rm.pdf"), width=6, height = 3,
 ## Predictions ----
 prob <- dataNoDisp %>%
   filter(rep==1) %>%
-  mutate(sampleSize = 100) %>%
+  mutate(sampleSize = 1000) %>%
   mutate(samples = pmap(., function(summaryM, sampleSize, meanA, NTotalKPredicted, p, ...){
     tibble(m = sample(x=summaryM$m, size=sampleSize, prob = summaryM$fractionPatchesPredicted, replace=T)) %>% 
       left_join(summaryM, by="m", multiple="all") %>% #get variables that match the sampled m
