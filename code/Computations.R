@@ -118,7 +118,7 @@ ggplot(dataNoDispSimple %>% mutate(meanA2 = meanA) %>%
   geom_line(show.legend = F) + 
   facet_grid(cols=vars(n)) +
   labs(x="nr of persisting species, m", 
-       y=expression(paste("fraction of patches occupied, f"[m])), 
+       y=expression(paste("probability of coexistence, f"[m])), 
        col="a")
 
 ggsave(paste0("../figures/fm.pdf"), width=6, height = 3, 
@@ -196,7 +196,7 @@ ggplot(prob) +
 ggsave(paste0("../figures/Analytical.pdf"), width=6, height = 3, 
        device = "pdf")  
 
-## Plot predictions of prob, conditional on i persisting w/o disp. ----
+## Plot predictions of prob, conditional on i persisting/excluded w/o disp. ----
 ggplot(prob) + 
   theme_bw() +
   scale_color_gradient(low = "yellow", high = "red") +
@@ -204,7 +204,9 @@ ggplot(prob) +
   geom_point() + 
   facet_grid(cols=vars(n)) +
   labs(x=expression(paste("log"[10],"(d)")), 
-       y="Patch occupancy, analytical", col="a")
+       y=expression(paste("P(N"[i],">0|N"[i,0],">0)")),
+       #y=expression(paste("P(N"[i],">0|N"[i,0],"=0)")), 
+       col="a")
 
 ggsave(paste0("../figures/probPer.pdf"), width=6, height = 3, 
        device = "pdf")  
