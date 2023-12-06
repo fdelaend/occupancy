@@ -4,6 +4,7 @@
 # Folders to ignore
 /figures/*.*
 /mathematica/*.*
+/mathematica/teo/*.*
 
 # History files
 .Rhistory
