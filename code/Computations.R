@@ -1,9 +1,9 @@
 
 # SIMULATIONS ----
 ## Simulations ------
-data <- expand_grid(n = c(4, 6, 8), meanA = c(0.2, 0.4, 0.6, 0.8), #, 6; 0.4, 
+data <- expand_grid(n = c(4, 6, 8), meanA = c(0, 0.2, 0.8), #, 6; 0.4, 0.4, 0.6, 
                     d = seq(-6,-4, length.out=6), # 6
-                    sdA = 0, p = 100, rep = c(1:3)) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
+                    sdA = 0.05, p = 100, rep = c(1:3)) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
   #Make parameters
   mutate(d = 10^d) %>%
   mutate(A = pmap(., function(meanA, sdA, n, ...) 
@@ -30,7 +30,7 @@ data <- expand_grid(n = c(4, 6, 8), meanA = c(0.2, 0.4, 0.6, 0.8), #, 6; 0.4,
                 meanRPer = mean(meanRPer)) %>% #mean r of persisting sp.
       ungroup()})) %>%
   #2/proportion of patches in which all n species persist
-  mutate(propPatchesN = 1/p*map2_dbl(summaryM, n, ~ (.x %>% filter(m==.y))$nrPatches)) %>%
+  #mutate(propPatchesN = 1/p*map2_dbl(summaryM, n, ~ (.x %>% filter(m==.y))$nrPatches)) %>%
   #3/total density across all patches of a species
   mutate(NTotalK = pmap(., function(NHat,...) {
     NHat %>% 
@@ -74,7 +74,7 @@ meanR  <- sum(pdfRs$x*pdfRs$y)/sum(pdfRs$y)#grant mean of R
 # INTERMEDIATE PREDICTIONS ----
 ## Select data w/o dispersal and make predictions ------
 dataNoDisp <- data %>%
-  filter(d==min(d), meanA>0) %>%
+  filter(d==min(d)) %>%
   select(n, meanA, p, rep, summaryM, NTotalK) %>%
   mutate(NTotalK = map_dbl(NTotalK, ~mean(.x$NTotalK))) %>% #mean across sp
   mutate(summaryM = pmap(., function(summaryM, meanA, n, ...) { #add predictions
