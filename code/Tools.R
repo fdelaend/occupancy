@@ -143,20 +143,6 @@ get_fraction_m <- function(meanA=0.5, m=2, n=3, ...){
   choose(n, m) * feas1combo
   }
 
-#get Ni when N0i is larger than zero for all i
-get_Ni_N0iLargerThen0 <- function(a=0.5, n=10, d=1e-4, p=100, N0Inv=1/1, ri=1, NTotalK=10) {
-  (1/(1 + a*(-1 + n)))*((a + a*n*(-1 + ri) + ri - 2*a*ri)/(1 - a) + 
-   d*(1 - p + ((-1 + a*(4 - 2*n + a*(-5 + a*(-2 + n)*(-1 + n) - N0Inv - n*(-5 + n + (-2 + n)*N0Inv)) + (1 + a*(-2 + n))*(-1 + n)*N0Inv*ri))*NTotalK)/
-        ((-1 + a)*(a - a*n + ri + a*(-2 + n)*ri))))
-}
-
-#Simplified version, assuming that N0i times the mean of 1/N0i across species is roughly equal to 1
-#N0i has no default because needs to be computed by get_N0i
-get_Ni_N0iLargerThen0 <- function(a=0.5, n=10, d=1e-4, p=100, 
-                                  N0i, NTotalK=10) {
-  ((1 + a*(-1 + n))*N0i^2 + d*(N0i - N0i*p + NTotalK))/(N0i + a*(-1 + n)*N0i)
-}
-
 #get the density of a species i when there is no dispersal
 get_N0i <- function(a=0.5, n=10, r=1, ri=0.1){
   (a*(n - 1)*r - ri*(a*(n - 2) + 1))/((a - 1)*(a*(n - 1) + 1))
@@ -175,10 +161,11 @@ get_N1iExc <- function(NTotalK=10, ri=1, a=0.5, SumN0j){
 #a = interaction strength
 #n and m: nr of species in the regional pool and in the focal patch
 #meanN1iExc = mean of N1iExc across species
-#meanEpsN0i = mean of EpsN0i across species
-#EpsN0i = epsilon for species i, given that it persists w/o dispersal
-get_N1iPer <- function(a=0.5, n=4, m=1, EpsN0i, meanN1iExc, meanEpsN0i){
-  (a*((a-1)*meanN1iExc*(n-m)-m*meanEpsN0i+m*EpsN0i-2*EpsN0i)+EpsN0i)/((a-1)*(a*(m-1)+1))
+#rho = mean of rhoi across species
+#rhoi = rho for species i, given that it persists w/o dispersal
+get_N1iPer <- function(a=0.5, n=4, m=1, rho, rhoi, p, meanN1iExc){
+  (a*((1-a)*meanN1iExc*(n-m)+(m-1)*rho+(2-m)*rhoi) + (p-1)*(1-a) - rhoi)/
+    ((1-a)*(a*(m-1)+1))
 }
 
 #make a distribution of nr of species in a patch in

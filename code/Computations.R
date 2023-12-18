@@ -1,9 +1,9 @@
 
 # SIMULATIONS ----
 ## Simulations ------
-data <- expand_grid(n = c(4, 6, 8), meanA = c(0, 0.2, 0.8), #, 6; 0.4, 0.4, 0.6, 
+data <- expand_grid(n = c(4, 6, 8), meanA = c(0.1, 0.2, 0.8), #, 6; 0.4, 0.4, 0.6, 
                     d = seq(-6,-4, length.out=6), # 6
-                    sdA = 0.05, p = 100, rep = c(1:3)) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
+                    sdA = 0, p = 100, rep = c(1:3)) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
   #Make parameters
   mutate(d = 10^d) %>%
   mutate(A = pmap(., function(meanA, sdA, n, ...) 
@@ -30,7 +30,7 @@ data <- expand_grid(n = c(4, 6, 8), meanA = c(0, 0.2, 0.8), #, 6; 0.4, 0.4, 0.6,
                 meanRPer = mean(meanRPer)) %>% #mean r of persisting sp.
       ungroup()})) %>%
   #2/proportion of patches in which all n species persist
-  #mutate(propPatchesN = 1/p*map2_dbl(summaryM, n, ~ (.x %>% filter(m==.y))$nrPatches)) %>%
+  mutate(propPatchesN = 1/p*map2_dbl(summaryM, n, ~ (.x %>% filter(m==.y))$nrPatches)) %>%
   #3/total density across all patches of a species
   mutate(NTotalK = pmap(., function(NHat,...) {
     NHat %>% 
@@ -160,19 +160,17 @@ prob <- dataNoDisp %>%
       ungroup() %>%
       mutate(N0i=get_N0i(a=meanA, n=m, r=meanRPerPredicted, ri=riPer), 
              N1iExc=get_N1iExc(NTotalK=NTotalKPredicted, ri=riExc, a=meanA, NTotalPredicted),
-             Eps = NTotalKPredicted/p*(p-1)-(p-1)*N0i,
-             EpsN0i = Eps/N0i)})) %>%
+             rhoi = NTotalKPredicted/p*(p-1)/N0i)})) %>%
   mutate(means = map(samples, ~ .x %>% group_by(m) %>% #mean across samples with the same m to mimick mean across species 
-                       summarize(meanEpsN0i = mean(EpsN0i, na.rm=T),
-                                 meanN1iExc=mean(N1iExc, na.rm=T),
-                                 meanEps = mean(Eps, na.rm=T)))) %>%
+                       summarize(meanN1iExc=mean(N1iExc, na.rm=T),
+                                 rho = mean(rhoi, na.rm=T)))) %>%
   mutate(samples = map2(samples, means, ~.x %>% #add means to samples
                           left_join(.y, by="m"))) %>%
   expand_grid(d = seq(-6,-4, length.out=6)) %>%
   mutate(d=10^d) %>%
-  mutate(samples = pmap(., function(samples, d, meanA, n, ...){ samples %>%
-      mutate(N1iPer = get_N1iPer(a=meanA, n=n, m=m, EpsN0i, #N1i when i persists w/o disp.
-                                 meanN1iExc, meanEpsN0i), 
+  mutate(samples = pmap(., function(samples, d, meanA, n, p, ...){ samples %>%
+      mutate(N1iPer = get_N1iPer(a=meanA, n=n, m=m, rho=rho, #N1i when i persists w/o disp.
+                                 rhoi=rhoi, meanN1iExc=meanN1iExc, p=p), 
              NiExc = d*N1iExc, #Ni when i is excluded w/o disp.
              NiPer = N0i+d*N1iPer)})) %>% #Ni when i persists w/o disp.
   mutate(probExc = map_dbl(samples, ~sum(.x$NiExc>extinctionThreshold)/length(.x$NiExc)), #Compute probabilities that > threshold
