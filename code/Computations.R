@@ -39,7 +39,7 @@ data <- expand_grid(n = c(4, 6, 8), meanA = c(0.1, 0.2, 0.8), #, 6; 0.4, 0.4, 0.
 
 ## Plot simulations  ----
 ggplot(data) + 
-  scale_color_gradient(low = "yellow", high = "red") +
+  scale_color_viridis_c(option="plasma", end=0.9) +
   scale_linetype_discrete(rep("solid", 100)) +
   theme_bw() +
   aes(x=log10(d), y=propPatchesN, col=meanA) + 
