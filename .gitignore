@@ -5,6 +5,7 @@
 /figures/*.*
 /mathematica/*.*
 /mathematica/teo/*.*
+/data/*.*
 
 # History files
 .Rhistory
