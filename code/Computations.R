@@ -1,11 +1,12 @@
 
 # SIMULATIONS ----
 ## Simulations ------
-data <- expand_grid(n = c(4, 6, 8), meanA = c(0.1, 0.2, 0.8), #, 6; 0.4, 0.4, 0.6, 
-                    d = seq(-6,-4, length.out=6), # 6
-                    sdA = 0, p = 100, rep = c(1:3)) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
+data <- expand_grid(n = c(6), meanA = c(0.2, 0.4, 0.8), #, 6; 0.4, 0.4, 0.6, 
+                    d = seq(-6,-4, length.out=6), vary=c(0, 0.1), # 6
+                    cvA = c(0, 0.5), p = 100, rep = c(1:3)) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
   #Make parameters
-  mutate(d = 10^d) %>%
+  mutate(d = 10^d,
+         sdA = cvA * meanA) %>%
   mutate(A = pmap(., function(meanA, sdA, n, ...) 
     matrix(data = rnorm(n^2, meanA, sdA), ncol = n) %>% #make symmetric and ditch diagonal; set self to 1
       make_symmetric() %>% set_diagonal(d=1))) %>% 
@@ -46,9 +47,7 @@ ggplot(data) +
   geom_point() +
   labs(x=expression(paste("log"[10],"(d)")), 
        y="Patch occupancy, simulated", col="a") +
-  #geom_line(aes(x=log10(d), y=feasibility, col=meanA,
-  #              group=interaction(meanA, rep))) + 
-  facet_grid(cols=vars(n))
+  facet_grid(cols=vars(cvA), rows=vars(vary))
 
 ggsave(paste0("../figures/feas.pdf"), width=6, height = 3, 
        device = "pdf")
@@ -66,7 +65,7 @@ ggplot(Rs) +
   aes(R, col=as.factor(location)) + 
   geom_density(show.legend=F) + 
   geom_density(aes(R), show.legend=F, lwd=2, col="black") + 
-  facet_grid(cols=vars(n))
+  facet_grid(cols=vars(cvA), rows=vars(vary))
 
 pdfRs  <- density(Rs$R, from=0)
 meanR  <- sum(pdfRs$x*pdfRs$y)/sum(pdfRs$y)#grant mean of R
@@ -75,7 +74,7 @@ meanR  <- sum(pdfRs$x*pdfRs$y)/sum(pdfRs$y)#grant mean of R
 ## Select data w/o dispersal and make predictions ------
 dataNoDisp <- data %>%
   filter(d==min(d)) %>%
-  select(n, meanA, p, rep, summaryM, NTotalK) %>%
+  select(n, meanA, p, rep, summaryM, NTotalK, vary, cvA) %>%
   mutate(NTotalK = map_dbl(NTotalK, ~mean(.x$NTotalK))) %>% #mean across sp
   mutate(summaryM = pmap(., function(summaryM, meanA, n, ...) { #add predictions
     summaryM %>%
@@ -91,20 +90,21 @@ dataNoDisp <- data %>%
 ## showcase accuracy of NtotalK ----
 ggplot(dataNoDisp) + 
   theme_bw() +
-  scale_color_gradient(low = "yellow", high = "red") +
+  scale_color_viridis_c(option="plasma", end=0.9) +
   aes(x=NTotalK, y=NTotalKPredicted, col=meanA) + 
   geom_point() + 
   geom_abline(slope=1, intercept=0) + 
   labs(x=expression(paste(Sigma[{k}],"N"[{"0,i"}]^{(k)},~"simulated")), 
        y=expression(paste(Sigma[{k}],"N"[{"0,i"}]^{(k)},~"analytical")), 
-       col="a") 
+       col="a") +
+  facet_grid(cols=vars(cvA), rows=vars(vary))
 
 ggsave(paste0("../figures/Nk.pdf"), width=3, height = 2, 
        device = "pdf")
   
 ## showcase accuracy of f(m) -----
 dataNoDispSimple <- dataNoDisp %>%
-  select(all_of(c("meanA", "n", "p", "rep", "summaryM"))) %>%
+  select(all_of(c("meanA", "n", "p", "rep", "summaryM", "cvA", "vary"))) %>%
   unnest(summaryM) %>%
   mutate(fractionPatches = nrPatches/p) 
 
@@ -112,11 +112,11 @@ ggplot(dataNoDispSimple %>% mutate(meanA2 = meanA) %>%
          unite("it", rep, meanA2)) + 
   theme_bw() +
   scale_linetype_manual(values=rep("solid", 1000)) + 
-  scale_color_gradient(low = "yellow", high = "red") +
+  scale_color_viridis_c(option="plasma", end=0.9) +
   geom_point(aes(x=m, y=fractionPatches, col=meanA), alpha=0.5) + 
   aes(x=m, y=fractionPatchesPredicted, col=meanA, lty=as_factor(it)) + #,,  
   geom_line(show.legend = F) + 
-  facet_grid(cols=vars(n)) +
+  facet_grid(cols=vars(cvA), rows=vars(vary)) +
   labs(x="nr of persisting species, m", 
        y=expression(paste("probability of coexistence, f"[m])), 
        col="a")
@@ -129,11 +129,11 @@ ggplot(dataNoDispSimple %>% mutate(meanA2 = meanA) %>%
          unite("it", rep, meanA2)) + 
   theme_bw() +
   scale_linetype_manual(values=rep("solid", 1000)) + 
-  scale_color_gradient(low = "yellow", high = "red") +
+  scale_color_viridis_c(option="plasma", end=0.9) +
   geom_point(aes(x=m, y=meanRPer, col=meanA), alpha=0.5) + 
   aes(x=m, y=meanRPerPredicted, col=meanA, lty=as_factor(it)) + #,,  
   geom_line(show.legend = F) + 
-  facet_grid(cols=vars(n)) +
+  facet_grid(cols=vars(cvA), rows=vars(vary)) +
   labs(x="nr of persisting species, m", 
        y="mean r of persisting species", 
        col="a")
@@ -184,10 +184,10 @@ prob <- dataNoDisp %>%
 ## Plot predictions of main prob ----
 ggplot(prob) + 
   theme_bw() +
-  scale_color_gradient(low = "yellow", high = "red") +
+  scale_color_viridis_c(option="plasma", end=0.9) +
   aes(x=log10(d), y=prob, col=meanA) + 
   geom_point() + 
-  facet_grid(cols=vars(n)) +
+  facet_grid(cols=vars(cvA), rows=vars(vary)) +
   labs(x=expression(paste("log"[10],"(d)")), 
        y="Patch occupancy, analytical", col="a")
 
@@ -197,10 +197,10 @@ ggsave(paste0("../figures/Analytical.pdf"), width=6, height = 3,
 ## Plot predictions of prob, conditional on i persisting/excluded w/o disp. ----
 ggplot(prob) + 
   theme_bw() +
-  scale_color_gradient(low = "yellow", high = "red") +
+  scale_color_viridis_c(option="plasma", end=0.9) +
   aes(x=log10(d), y=probPer, col=meanA) + 
   geom_point() + 
-  facet_grid(cols=vars(n)) +
+  facet_grid(cols=vars(cvA), rows=vars(vary)) +
   labs(x=expression(paste("log"[10],"(d)")), 
        y=expression(paste("P(N"[i],">0|N"[i,0],">0)")),
        #y=expression(paste("P(N"[i],">0|N"[i,0],"=0)")), 
@@ -211,18 +211,18 @@ ggsave(paste0("../figures/probPer.pdf"), width=6, height = 3,
 
 ## Add simulated data to the predictions and plot -----
 dataSel <- data %>% #selection of data
-  select(all_of(c("n", "meanA", "d", "propPatchesN"))) %>%
-  left_join(prob, by=c("n", "meanA", "d"))
+  select(all_of(c("n", "meanA", "d", "propPatchesN", "vary", "cvA"))) %>%
+  left_join(prob, by=c("n", "meanA", "d", "vary", "cvA"))
 
 ggplot(dataSel %>% mutate(meanA2 = meanA) %>%
          unite("it", rep, meanA2)) + 
   theme_bw() +
   scale_linetype_manual(values=rep("solid", 1000)) + 
-  scale_color_gradient(low = "yellow", high = "red") +
+  scale_color_viridis_c(option="plasma", end=0.9) +
   geom_point(aes(x=log10(d), y=propPatchesN, col=meanA)) + 
   geom_line(aes(x=log10(d), y=prob, col=meanA, lty=as_factor(it)), 
             show.legend = F) +
-  facet_grid(cols=vars(n)) +
+  facet_grid(cols=vars(cvA), rows=vars(vary)) +
   labs(x=expression(paste("log"[10],"(d)")), 
        y="Patch occupancy", col="a")
 
@@ -231,24 +231,24 @@ ggsave(paste0("../figures/feasPred.pdf"), width=6, height = 3,
 
 ## Probability for extinction w/o disp. (theory and sims) --------
 dataNoDisp <- data %>%
-  select(n, d, p, meanA, rep, NHat) %>%
+  select(n, d, p, meanA, rep, NHat, vary, cvA) %>%
   filter(d==min(d), meanA>0) %>%
   select(-d) %>%
   mutate(fractionExct = map_dbl(NHat, ~.x %>%
                           filter(sp==1, density<extinctionThreshold)%>%
                           nrow)/p) %>%
   left_join(prob%>%filter(d==min(d))%>%select(-d), 
-            by=c("meanA", "rep", "p", "n"))
+            by=c("meanA", "rep", "p", "n", "vary", "cvA"))
 
 ggplot(dataNoDisp) + 
   theme_bw() +
   scale_linetype_manual(values=rep("solid", 1000)) + 
-  scale_color_gradient(low = "yellow", high = "red") +
+  scale_color_viridis_c(option="plasma", end=0.9) +
   geom_point(aes(x=meanA, y=fractionExct), alpha=0.5) + 
   aes(x=meanA, y=probN0iExt, lty=as.factor(rep)) + #,,  
   geom_line(show.legend = F) + 
   #scale_color_gradient(low = "yellow", high = "red") +
-  facet_grid(cols=vars(n)) +
+  facet_grid(cols=vars(cvA), rows=vars(vary)) +
   labs(x="a", 
        y="Probability that sp. i \n gets excluded w/o disp.", col="a")
 
