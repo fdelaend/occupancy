@@ -2,7 +2,7 @@
 # SIMULATIONS ----
 ## Simulations ------
 data <- expand_grid(n = c(6), meanA = c(0.2, 0.4, 0.8), #, 6; 0.4, 0.4, 0.6, 
-                    d = seq(-6,-4, length.out=6), vary=c(0, 0.1), # 6
+                    d = seq(-6,-4, length.out=6), vary=c(0, 0.1), k=c(1, 1.5),
                     cvA = c(0, 0.5), p = 100, rep = c(1:3)) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
   #Make parameters
   mutate(d = 10^d,
@@ -38,22 +38,11 @@ data <- expand_grid(n = c(6), meanA = c(0.2, 0.4, 0.8), #, 6; 0.4, 0.4, 0.6,
       group_by(sp) %>% #sum across patches for every sp.
       summarize(NTotalK = sum(density))})) #so you can check it's comparable across sp
 
-## Plot simulations  ----
-ggplot(data) + 
-  scale_color_viridis_c(option="plasma", end=0.9) +
-  scale_linetype_discrete(rep("solid", 100)) +
-  theme_bw() +
-  aes(x=log10(d), y=propPatchesN, col=meanA) + 
-  geom_point() +
-  labs(x=expression(paste("log"[10],"(d)")), 
-       y="Patch occupancy, simulated", col="a") +
-  facet_grid(cols=vars(cvA), rows=vars(vary))
-
-ggsave(paste0("../figures/feas.pdf"), width=6, height = 3, 
-       device = "pdf")
+#saveRDS(data, "../data/data.rds")
+#data <- readRDS("../data/data.rds")
 
 ## Recover the distribution of the growth rates and plot --------
-Rs     <- data %>% filter(d==min(d), meanA==0.8, rep==1) %>% select(n, R, NHat) %>% 
+Rs     <- data %>% filter(d==min(d), meanA==0.8, rep==1, k==1) %>% select(n, R, NHat) %>% 
   mutate(NHat = map2(R, NHat, ~ .y %>% mutate(R=.x))) %>%
   #filter(n==6) %>%
   select(-R) %>%
@@ -64,8 +53,7 @@ ggplot(Rs) +
   theme_bw() +
   aes(R, col=as.factor(location)) + 
   geom_density(show.legend=F) + 
-  geom_density(aes(R), show.legend=F, lwd=2, col="black") + 
-  facet_grid(cols=vars(cvA), rows=vars(vary))
+  geom_density(aes(R), show.legend=F, lwd=2, col="black") 
 
 pdfRs  <- density(Rs$R, from=0)
 meanR  <- sum(pdfRs$x*pdfRs$y)/sum(pdfRs$y)#grant mean of R
@@ -74,7 +62,7 @@ meanR  <- sum(pdfRs$x*pdfRs$y)/sum(pdfRs$y)#grant mean of R
 ## Select data w/o dispersal and make predictions ------
 dataNoDisp <- data %>%
   filter(d==min(d)) %>%
-  select(n, meanA, p, rep, summaryM, NTotalK, vary, cvA) %>%
+  select(n, meanA, p, rep, summaryM, NTotalK, vary, cvA, k) %>%
   mutate(NTotalK = map_dbl(NTotalK, ~mean(.x$NTotalK))) %>% #mean across sp
   mutate(summaryM = pmap(., function(summaryM, meanA, n, ...) { #add predictions
     summaryM %>%
@@ -88,7 +76,7 @@ dataNoDisp <- data %>%
   mutate(NTotalKPredicted = p/n*map_dbl(summaryM, ~sum(.x$fractionPatchesPredicted * .x$NTotalPredicted)))
 
 ## showcase accuracy of NtotalK ----
-ggplot(dataNoDisp) + 
+ggplot(dataNoDisp %>% filter(k==1)) + 
   theme_bw() +
   scale_color_viridis_c(option="plasma", end=0.9) +
   aes(x=NTotalK, y=NTotalKPredicted, col=meanA) + 
@@ -103,7 +91,7 @@ ggsave(paste0("../figures/Nk.pdf"), width=3, height = 2,
        device = "pdf")
   
 ## showcase accuracy of f(m) -----
-dataNoDispSimple <- dataNoDisp %>%
+dataNoDispSimple <- dataNoDisp %>% filter(k==1) %>%
   select(all_of(c("meanA", "n", "p", "rep", "summaryM", "cvA", "vary"))) %>%
   unnest(summaryM) %>%
   mutate(fractionPatches = nrPatches/p) 
@@ -182,7 +170,7 @@ prob <- dataNoDisp %>%
          prob = (probExc*probN0iExt + probPer*probN0iPer)^n) #grant prob
 
 ## Plot predictions of main prob ----
-ggplot(prob) + 
+ggplot(prob %>% filter(k==1)) + 
   theme_bw() +
   scale_color_viridis_c(option="plasma", end=0.9) +
   aes(x=log10(d), y=prob, col=meanA) + 
@@ -195,7 +183,7 @@ ggsave(paste0("../figures/Analytical.pdf"), width=6, height = 3,
        device = "pdf")  
 
 ## Plot predictions of prob, conditional on i persisting/excluded w/o disp. ----
-ggplot(prob) + 
+ggplot(prob %>% filter(k==1)) + 
   theme_bw() +
   scale_color_viridis_c(option="plasma", end=0.9) +
   aes(x=log10(d), y=probPer, col=meanA) + 
@@ -211,20 +199,20 @@ ggsave(paste0("../figures/probPer.pdf"), width=6, height = 3,
 
 ## Add simulated data to the predictions and plot -----
 dataSel <- data %>% #selection of data
-  select(all_of(c("n", "meanA", "d", "propPatchesN", "vary", "cvA"))) %>%
-  left_join(prob, by=c("n", "meanA", "d", "vary", "cvA"))
+  select(all_of(c("n", "meanA", "d", "propPatchesN", "vary", "cvA", "k"))) %>%
+  left_join(prob, by=c("n", "meanA", "d", "vary", "cvA", "k"))
 
 ggplot(dataSel %>% mutate(meanA2 = meanA) %>%
          unite("it", rep, meanA2)) + 
   theme_bw() +
   scale_linetype_manual(values=rep("solid", 1000)) + 
   scale_color_viridis_c(option="plasma", end=0.9) +
-  geom_point(aes(x=log10(d), y=propPatchesN, col=meanA)) + 
+  geom_point(aes(x=log10(d), y=propPatchesN, col=meanA, pch=as.factor(k))) + 
   geom_line(aes(x=log10(d), y=prob, col=meanA, lty=as_factor(it)), 
             show.legend = F) +
-  facet_grid(cols=vars(cvA), rows=vars(vary)) +
+  facet_grid(cols=vars(cvA), rows=vars(vary), labeller = label_both) +
   labs(x=expression(paste("log"[10],"(d)")), 
-       y="Patch occupancy", col="a")
+       y="Patch occupancy", col="a", pch="k")
 
 ggsave(paste0("../figures/feasPred.pdf"), width=6, height = 3, 
        device = "pdf")  

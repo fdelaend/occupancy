@@ -67,13 +67,14 @@ make_symmetric <- function(A){
 #negative_sign is a vector telling which species needs to have a negative intrinsic growth rate
 #example: c(2,3) is the case where the intrinsic growth rate of sp 2 and 3 carry a negative sign
 #If you want none to have a negative r, just go negative_sign= some i>n
-#n is nr of species, p is nr of patches
-make_R_spatial <- function(n, p, negative_sign=10000, ...){
+#n is nr of species, p is nr of patches, k is fold increase of the strongest species' growth rate
+make_R_spatial <- function(n, p, k=1, negative_sign=10000, ...){
   #sample from a sphere to get the directions right
   rawRs <- t(sample_sphere_surface(dim=n, n = p, radius = 1, positive = TRUE))
   #now make sure the mean r across species is 1 at all patches
   rawRs <- rawRs %*% diag(1/colMeans(rawRs))
   rawRs <- diag(1/rowMeans(rawRs)) %*% rawRs  
+  rawRs <- rawRs %*% diag(c(k, rep(1/k, n-1))) # relax regional equivalence: make one species more competitive than expected across all patches
   colnames(rawRs) <- c(1:n)
   #and put everything into a nice format
   Rs     <- as_tibble(rawRs)%>%
