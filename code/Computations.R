@@ -76,23 +76,23 @@ dataNoDisp <- data %>%
   mutate(NTotalKPredicted = p/n*map_dbl(summaryM, ~sum(.x$fractionPatchesPredicted * .x$NTotalPredicted)))
 
 ## showcase accuracy of NtotalK ----
-ggplot(dataNoDisp %>% filter(k==1)) + 
+ggplot(dataNoDisp) + 
   theme_bw() +
   scale_color_viridis_c(option="plasma", end=0.9) +
-  aes(x=NTotalK, y=NTotalKPredicted, col=meanA) + 
+  aes(x=NTotalK, y=NTotalKPredicted, col=meanA, pch=as.factor(k)) + 
   geom_point() + 
   geom_abline(slope=1, intercept=0) + 
   labs(x=expression(paste(Sigma[{k}],"N"[{"0,i"}]^{(k)},~"simulated")), 
        y=expression(paste(Sigma[{k}],"N"[{"0,i"}]^{(k)},~"analytical")), 
-       col="a") +
+       col="a", pch="k (equivalence)") +
   facet_grid(cols=vars(cvA), rows=vars(vary), labeller = label_both)
 
 ggsave(paste0("../figures/Nk.pdf"), width=3, height = 2, 
        device = "pdf")
   
 ## showcase accuracy of f(m) -----
-dataNoDispSimple <- dataNoDisp %>% filter(k==1) %>%
-  select(all_of(c("meanA", "n", "p", "rep", "summaryM", "cvA", "vary"))) %>%
+dataNoDispSimple <- dataNoDisp %>%
+  select(all_of(c("meanA", "n", "p", "rep", "summaryM", "cvA", "vary", "k"))) %>%
   unnest(summaryM) %>%
   mutate(fractionPatches = nrPatches/p) 
 
@@ -102,12 +102,13 @@ ggplot(dataNoDispSimple %>% mutate(meanA2 = meanA) %>%
   scale_linetype_manual(values=rep("solid", 1000)) + 
   scale_color_viridis_c(option="plasma", end=0.9) +
   geom_point(aes(x=m, y=fractionPatches, col=meanA), alpha=0.5) + 
-  aes(x=m, y=fractionPatchesPredicted, col=meanA, lty=as_factor(it)) + #,,  
+  aes(x=m, y=fractionPatchesPredicted, col=meanA, 
+      lty=as_factor(it), pch=as.factor(k)) + #,,  
   geom_line(show.legend = F) + 
   facet_grid(cols=vars(cvA), rows=vars(vary), labeller = label_both) +
   labs(x="nr of persisting species, m", 
        y=expression(paste("probability of coexistence, f"[m])), 
-       col="a")
+       col="a", pch="k (equivalence)")
 
 ggsave(paste0("../figures/fm.pdf"), width=6, height = 3, 
        device = "pdf")
@@ -118,13 +119,13 @@ ggplot(dataNoDispSimple %>% mutate(meanA2 = meanA) %>%
   theme_bw() +
   scale_linetype_manual(values=rep("solid", 1000)) + 
   scale_color_viridis_c(option="plasma", end=0.9) +
-  geom_point(aes(x=m, y=meanRPer, col=meanA), alpha=0.5) + 
+  geom_point(aes(x=m, y=meanRPer, col=meanA, pch=as.factor(k)), alpha=0.5) + 
   aes(x=m, y=meanRPerPredicted, col=meanA, lty=as_factor(it)) + #,,  
   geom_line(show.legend = F) + 
   facet_grid(cols=vars(cvA), rows=vars(vary), labeller = label_both) +
   labs(x="nr of persisting species, m", 
        y="mean r of persisting species", 
-       col="a")
+       col="a", pch="k (equivalence)")
 
 ggsave(paste0("../figures/rm.pdf"), width=6, height = 3, 
        device = "pdf")
@@ -136,7 +137,8 @@ ggsave(paste0("../figures/rm.pdf"), width=6, height = 3,
 # ANALYTICAL PREDICTIONS -----
 ## Predictions ----
 prob <- dataNoDisp %>%
-  filter(rep==1) %>%
+  filter(rep==1, k==1, cvA==0, vary==0) %>%
+  select(-c("rep", "k", "cvA", "vary")) %>%
   mutate(sampleSize = 1000) %>%
   mutate(samples = pmap(., function(summaryM, sampleSize, meanA, NTotalKPredicted, p, ...){
     tibble(m = sample(x=summaryM$m, size=sampleSize, prob = summaryM$fractionPatchesPredicted, replace=T)) %>% 
@@ -170,37 +172,33 @@ prob <- dataNoDisp %>%
          prob = (probExc*probN0iExt + probPer*probN0iPer)^n) #grant prob
 
 ## Plot predictions of main prob ----
-ggplot(prob %>% filter(k==1)) + 
+ggplot(prob) + 
   theme_bw() +
   scale_color_viridis_c(option="plasma", end=0.9) +
   aes(x=log10(d), y=prob, col=meanA) + 
   geom_point() + 
-  facet_grid(cols=vars(cvA), rows=vars(vary), labeller = label_both) +
   labs(x=expression(paste("log"[10],"(d)")), 
        y="Patch occupancy, analytical", col="a")
 
-ggsave(paste0("../figures/Analytical.pdf"), width=6, height = 3, 
+ggsave(paste0("../figures/Analytical.pdf"), width=4, height = 3, 
        device = "pdf")  
 
 ## Plot predictions of prob, conditional on i persisting/excluded w/o disp. ----
-ggplot(prob %>% filter(k==1)) + 
+ggplot(prob) + 
   theme_bw() +
   scale_color_viridis_c(option="plasma", end=0.9) +
   aes(x=log10(d), y=probPer, col=meanA) + 
-  geom_point() + 
-  facet_grid(cols=vars(cvA), rows=vars(vary), labeller = label_both) +
+  geom_point()
   labs(x=expression(paste("log"[10],"(d)")), 
-       y=expression(paste("P(N"[i],">0|N"[i,0],">0)")),
-       #y=expression(paste("P(N"[i],">0|N"[i,0],"=0)")), 
-       col="a")
+       y=expression(paste("P(N"[i],">0|N"[i,0],">0)")))
 
-ggsave(paste0("../figures/probPer.pdf"), width=6, height = 3, 
+ggsave(paste0("../figures/probPer.pdf"), width=4, height = 3, 
        device = "pdf")  
 
 ## Add simulated data to the predictions and plot -----
 dataSel <- data %>% #selection of data
-  select(all_of(c("n", "meanA", "d", "propPatchesN", "vary", "cvA", "k"))) %>%
-  left_join(prob, by=c("n", "meanA", "d", "vary", "cvA", "k"))
+  select(all_of(c("rep", "n", "meanA", "d", "propPatchesN", "vary", "cvA", "k"))) %>%
+  left_join(prob, by=c("n", "meanA", "d"), multiple = "all")
 
 ggplot(dataSel %>% mutate(meanA2 = meanA) %>%
          unite("it", rep, meanA2)) + 
@@ -219,26 +217,27 @@ ggsave(paste0("../figures/feasPred.pdf"), width=6, height = 3,
 
 ## Probability for extinction w/o disp. (theory and sims) --------
 dataNoDisp <- data %>%
-  select(n, d, p, meanA, rep, NHat, vary, cvA) %>%
+  select(n, d, p, meanA, rep, NHat, vary, k, cvA) %>%
   filter(d==min(d), meanA>0) %>%
   select(-d) %>%
   mutate(fractionExct = map_dbl(NHat, ~.x %>%
                           filter(sp==1, density<extinctionThreshold)%>%
                           nrow)/p) %>%
-  left_join(prob%>%filter(d==min(d))%>%select(-d), 
-            by=c("meanA", "rep", "p", "n", "vary", "cvA"))
+  left_join(prob %>% filter(d==min(d))%>%select(-d), 
+            by=c("meanA", "p", "n"))
 
 ggplot(dataNoDisp) + 
   theme_bw() +
   scale_linetype_manual(values=rep("solid", 1000)) + 
   scale_color_viridis_c(option="plasma", end=0.9) +
   geom_point(aes(x=meanA, y=fractionExct), alpha=0.5) + 
-  aes(x=meanA, y=probN0iExt, lty=as.factor(rep)) + #,,  
+  aes(x=meanA, y=probN0iExt, lty=as.factor(rep), pch=as.factor(k)) + #,,  
   geom_line(show.legend = F) + 
   #scale_color_gradient(low = "yellow", high = "red") +
   facet_grid(cols=vars(cvA), rows=vars(vary)) +
   labs(x="a", 
-       y="Probability that sp. i \n gets excluded w/o disp.", col="a")
+       y="Probability that sp. i \n gets excluded w/o disp.", 
+       col="a", pch="k")
 
 ggsave(paste0("../figures/PNi0Excl.pdf"), width=6, height = 3, 
        device = "pdf")  
