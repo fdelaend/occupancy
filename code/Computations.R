@@ -85,7 +85,7 @@ ggplot(dataNoDisp %>% filter(k==1)) +
   labs(x=expression(paste(Sigma[{k}],"N"[{"0,i"}]^{(k)},~"simulated")), 
        y=expression(paste(Sigma[{k}],"N"[{"0,i"}]^{(k)},~"analytical")), 
        col="a") +
-  facet_grid(cols=vars(cvA), rows=vars(vary))
+  facet_grid(cols=vars(cvA), rows=vars(vary), labeller = label_both)
 
 ggsave(paste0("../figures/Nk.pdf"), width=3, height = 2, 
        device = "pdf")
@@ -104,7 +104,7 @@ ggplot(dataNoDispSimple %>% mutate(meanA2 = meanA) %>%
   geom_point(aes(x=m, y=fractionPatches, col=meanA), alpha=0.5) + 
   aes(x=m, y=fractionPatchesPredicted, col=meanA, lty=as_factor(it)) + #,,  
   geom_line(show.legend = F) + 
-  facet_grid(cols=vars(cvA), rows=vars(vary)) +
+  facet_grid(cols=vars(cvA), rows=vars(vary), labeller = label_both) +
   labs(x="nr of persisting species, m", 
        y=expression(paste("probability of coexistence, f"[m])), 
        col="a")
@@ -121,7 +121,7 @@ ggplot(dataNoDispSimple %>% mutate(meanA2 = meanA) %>%
   geom_point(aes(x=m, y=meanRPer, col=meanA), alpha=0.5) + 
   aes(x=m, y=meanRPerPredicted, col=meanA, lty=as_factor(it)) + #,,  
   geom_line(show.legend = F) + 
-  facet_grid(cols=vars(cvA), rows=vars(vary)) +
+  facet_grid(cols=vars(cvA), rows=vars(vary), labeller = label_both) +
   labs(x="nr of persisting species, m", 
        y="mean r of persisting species", 
        col="a")
@@ -175,7 +175,7 @@ ggplot(prob %>% filter(k==1)) +
   scale_color_viridis_c(option="plasma", end=0.9) +
   aes(x=log10(d), y=prob, col=meanA) + 
   geom_point() + 
-  facet_grid(cols=vars(cvA), rows=vars(vary)) +
+  facet_grid(cols=vars(cvA), rows=vars(vary), labeller = label_both) +
   labs(x=expression(paste("log"[10],"(d)")), 
        y="Patch occupancy, analytical", col="a")
 
@@ -188,7 +188,7 @@ ggplot(prob %>% filter(k==1)) +
   scale_color_viridis_c(option="plasma", end=0.9) +
   aes(x=log10(d), y=probPer, col=meanA) + 
   geom_point() + 
-  facet_grid(cols=vars(cvA), rows=vars(vary)) +
+  facet_grid(cols=vars(cvA), rows=vars(vary), labeller = label_both) +
   labs(x=expression(paste("log"[10],"(d)")), 
        y=expression(paste("P(N"[i],">0|N"[i,0],">0)")),
        #y=expression(paste("P(N"[i],">0|N"[i,0],"=0)")), 
