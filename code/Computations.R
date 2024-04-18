@@ -234,7 +234,7 @@ ggplot(dataNoDisp) +
   aes(x=meanA, y=probN0iExt, lty=as.factor(rep), pch=as.factor(k)) + #,,  
   geom_line(show.legend = F) + 
   #scale_color_gradient(low = "yellow", high = "red") +
-  facet_grid(cols=vars(cvA), rows=vars(vary)) +
+  facet_grid(cols=vars(cvA), rows=vars(vary), labeller = label_both) +
   labs(x="a", 
        y="Probability that sp. i \n gets excluded w/o disp.", 
        col="a", pch="k")
