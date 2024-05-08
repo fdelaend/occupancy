@@ -75,42 +75,44 @@ dataNoDisp <- data %>%
            NTotalPredicted = get_N_total(meanA=meanA, n=m, r=meanRPerPredicted))})) %>% #predicted total density for a patch with m species
   mutate(NTotalKPredicted = p/n*map_dbl(summaryM, ~sum(.x$fractionPatchesPredicted * .x$NTotalPredicted)))
 
-## showcase accuracy of NtotalK ----
-ggplot(dataNoDisp) + 
-  theme_bw() +
-  scale_color_viridis_c(option="plasma", end=0.9) +
-  aes(x=NTotalK, y=NTotalKPredicted, col=meanA, pch=as.factor(k)) + 
-  geom_point() + 
-  geom_abline(slope=1, intercept=0) + 
-  labs(x=expression(paste(Sigma[{k}],"N"[{"0,i"}]^{(k)},~"simulated")), 
-       y=expression(paste(Sigma[{k}],"N"[{"0,i"}]^{(k)},~"analytical")), 
-       col="a", pch="k (equivalence)") +
-  facet_grid(cols=vars(cvA), rows=vars(vary), labeller = label_both)
-
-ggsave(paste0("../figures/Nk.pdf"), width=3, height = 2, 
-       device = "pdf")
-  
-## showcase accuracy of f(m) -----
-dataNoDispSimple <- dataNoDisp %>%
-  select(all_of(c("meanA", "n", "p", "rep", "summaryM", "cvA", "vary", "k"))) %>%
+## plot simulations of f(m) and showcase accuracy of predictions when d=0 -----
+dataFmPredicted <- dataNoDisp %>%
   unnest(summaryM) %>%
-  mutate(fractionPatches = nrPatches/p) 
+  select(all_of(c("meanA", "n", "p", "rep", "m", "fractionPatchesPredicted", 
+                  "cvA", "vary", "k")))
+  
+dataFm <- data %>%
+  unnest(summaryM) %>%
+  mutate(m=as.numeric(as.character(m))) %>%
+  mutate(fractionPatches = nrPatches/p) %>%
+  select(all_of(c("d", "meanA", "n", "p", "rep", "m", "fractionPatches", 
+                  "cvA", "vary", "k"))) %>%
+  left_join(dataFmPredicted, by=c("meanA", "n", "p", "rep", "m", "cvA", "vary", "k"),
+            multiple = "all") %>%
+  group_by(d, meanA, n, p, m, cvA, vary, k) %>%
+  summarise(meanProb = mean(fractionPatches),
+            sdProb = sd(fractionPatches),
+            meanProbPred = mean(fractionPatchesPredicted),
+            sdProbPred = sd(fractionPatchesPredicted))
 
-ggplot(dataNoDispSimple %>% mutate(meanA2 = meanA) %>%
-         unite("it", rep, meanA2)) + 
+ggplot(dataFm %>% filter(k==1, cvA==0) %>% mutate(d=round(log10(d),1))) + 
   theme_bw() +
   scale_linetype_manual(values=rep("solid", 1000)) + 
   scale_color_viridis_c(option="plasma", end=0.9) +
-  geom_point(aes(x=m, y=fractionPatches, col=meanA), alpha=0.5) + 
-  aes(x=m, y=fractionPatchesPredicted, col=meanA, 
-      lty=as_factor(it), pch=as.factor(k)) + #,,  
-  geom_line(show.legend = F) + 
-  facet_grid(cols=vars(cvA), rows=vars(vary), labeller = label_both) +
+  geom_point(aes(x=m, y=meanProb, col=meanA), alpha=0.3) + 
+  geom_errorbar(aes(x=m, ymin=meanProb-sdProb, 
+                    ymax=meanProb+sdProb, col=meanA, 
+                    width = 0.1)) +
+  geom_line(aes(x=m, y=meanProb, group=meanA, col=meanA), 
+            stat='smooth', lwd=2, alpha=0.3) +
+  geom_line(aes(x=m, y=meanProbPred, col=meanA, 
+                lty=as_factor(meanA)), show.legend = F, lwd=1) + 
+  facet_grid(rows=vars(d), labeller = label_both) +
   labs(x="nr of persisting species, m", 
-       y=expression(paste("probability of coexistence, f"[m])), 
-       col="a", pch="k (equivalence)")
+       y=expression(paste("fraction of patches, f"[m])), 
+       col="a")
 
-ggsave(paste0("../figures/fm.pdf"), width=6, height = 3, 
+ggsave(paste0("../figures/fm.pdf"), width=3, height = 4, 
        device = "pdf")
 
 ## showcase accuracy of mean r -----
@@ -133,6 +135,22 @@ ggsave(paste0("../figures/rm.pdf"), width=6, height = 3,
 #Changing the uniform approximation to a triangular one
 #does not seem to improve things (but double-check). So I suspect there is something 
 #fundamentally off at m is small. 
+
+## showcase accuracy of NtotalK ----
+ggplot(dataNoDisp %>% filter(k==1, vary==0, cvA==0)) + 
+  theme_bw() +
+  scale_color_viridis_c(option="plasma", end=0.9) +
+  aes(x=meanA, y=NTotalK) + 
+  geom_point() + 
+  geom_line(aes(x=meanA, y=NTotalKPredicted)) +
+  labs(x="a", 
+       y=expression(paste(Sigma[{k}],"N"[{"0,i"}]^{(k)}))) 
+#labs(x=expression(paste(Sigma[{k}],"N"[{"0,i"}]^{(k)},~"simulated")), 
+#     y=expression(paste(Sigma[{k}],"N"[{"0,i"}]^{(k)},~"analytical"))) +
+#facet_grid(cols=vars(cvA), rows=vars(vary), labeller = label_both)
+
+ggsave(paste0("../figures/Nk.pdf"), width=5, height = 3, 
+       device = "pdf")
 
 # ANALYTICAL PREDICTIONS -----
 ## Predictions ----
@@ -198,21 +216,29 @@ ggsave(paste0("../figures/probPer.pdf"), width=4, height = 3,
 ## Add simulated data to the predictions and plot -----
 dataSel <- data %>% #selection of data
   select(all_of(c("rep", "n", "meanA", "d", "propPatchesN", "vary", "cvA", "k"))) %>%
-  left_join(prob, by=c("n", "meanA", "d"), multiple = "all")
+  left_join(prob, by=c("n", "meanA", "d"), multiple = "all") %>%
+  group_by(n, meanA, d, vary, cvA, k) %>%
+  summarise(meanProb = mean(propPatchesN), 
+            sdProb = sd(propPatchesN),
+            meanProbPredicted = mean(prob))
 
-ggplot(dataSel %>% mutate(meanA2 = meanA) %>%
-         unite("it", rep, meanA2)) + 
+ggplot(dataSel) + 
   theme_bw() +
   scale_linetype_manual(values=rep("solid", 1000)) + 
   scale_color_viridis_c(option="plasma", end=0.9) +
-  geom_point(aes(x=log10(d), y=propPatchesN, col=meanA, pch=as.factor(k))) + 
-  geom_line(aes(x=log10(d), y=prob, col=meanA, lty=as_factor(it)), 
+  geom_point(aes(x=log10(d), y=meanProb, col=meanA, pch=as.factor(k))) +
+  geom_errorbar(aes(x=log10(d), ymin=meanProb-sdProb, 
+                    ymax=meanProb+sdProb, 
+                    col=meanA), width=0.1) +
+  geom_line(aes(x=log10(d), y=meanProbPredicted, col=meanA, lty=as_factor(meanA)), 
             show.legend = F) +
-  facet_grid(cols=vars(cvA), rows=vars(vary), labeller = label_both) +
+  facet_grid(cols=vars(cvA), rows=vars(vary), 
+             labeller = label_bquote(cols=paste("cv(", a[ij],")=", .(cvA)),
+                          rows=paste("vary=", .(vary)))) +
   labs(x=expression(paste("log"[10],"(d)")), 
        y="Patch occupancy", col="a", pch="k")
 
-ggsave(paste0("../figures/feasPred.pdf"), width=6, height = 3, 
+ggsave(paste0("../figures/feasPred.pdf"), width=5, height = 3, 
        device = "pdf")  
 
 ## Probability for extinction w/o disp. (theory and sims) --------
