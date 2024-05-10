@@ -61,8 +61,8 @@ meanR  <- sum(pdfRs$x*pdfRs$y)/sum(pdfRs$y)#grant mean of R
 # INTERMEDIATE PREDICTIONS ----
 ## Select data w/o dispersal and make predictions ------
 dataNoDisp <- data %>%
-  filter(d==min(d)) %>%
-  select(n, meanA, p, rep, summaryM, NTotalK, vary, cvA, k) %>%
+  filter(d==min(d), cvA==0, k==1) %>%
+  select(d, n, meanA, p, rep, summaryM, NTotalK, vary, cvA, k) %>%
   mutate(NTotalK = map_dbl(NTotalK, ~mean(.x$NTotalK))) %>% #mean across sp
   mutate(summaryM = pmap(., function(summaryM, meanA, n, ...) { #add predictions
     summaryM %>%
@@ -75,10 +75,10 @@ dataNoDisp <- data %>%
            NTotalPredicted = get_N_total(meanA=meanA, n=m, r=meanRPerPredicted))})) %>% #predicted total density for a patch with m species
   mutate(NTotalKPredicted = p/n*map_dbl(summaryM, ~sum(.x$fractionPatchesPredicted * .x$NTotalPredicted)))
 
-## plot simulations of f(m) and showcase accuracy of predictions when d=0 -----
+## plot simulations of f(m) -----
 dataFmPredicted <- dataNoDisp %>%
   unnest(summaryM) %>%
-  select(all_of(c("meanA", "n", "p", "rep", "m", "fractionPatchesPredicted", 
+  select(all_of(c("d", "meanA", "n", "p", "rep", "m", "fractionPatchesPredicted", 
                   "cvA", "vary", "k")))
   
 dataFm <- data %>%
@@ -87,7 +87,7 @@ dataFm <- data %>%
   mutate(fractionPatches = nrPatches/p) %>%
   select(all_of(c("d", "meanA", "n", "p", "rep", "m", "fractionPatches", 
                   "cvA", "vary", "k"))) %>%
-  left_join(dataFmPredicted, by=c("meanA", "n", "p", "rep", "m", "cvA", "vary", "k"),
+  left_join(dataFmPredicted, by=c("d", "meanA", "n", "p", "rep", "m", "cvA", "vary", "k"),
             multiple = "all") %>%
   group_by(d, meanA, n, p, m, cvA, vary, k) %>%
   summarise(meanProb = mean(fractionPatches),
@@ -95,24 +95,29 @@ dataFm <- data %>%
             meanProbPred = mean(fractionPatchesPredicted),
             sdProbPred = sd(fractionPatchesPredicted))
 
-ggplot(dataFm %>% filter(k==1, cvA==0) %>% mutate(d=round(log10(d),1))) + 
+dataFm %>% 
+  mutate(d=round(log10(d),1)) %>%
+  filter(k==1, d %in% c(-6, -5.2, -4.4)) %>% 
+  ggplot() + 
   theme_bw() +
-  scale_linetype_manual(values=rep("solid", 1000)) + 
+  scale_linetype_manual(values=rep("dashed", 1000)) + 
   scale_color_viridis_c(option="plasma", end=0.9) +
   geom_point(aes(x=m, y=meanProb, col=meanA), alpha=0.3) + 
   geom_errorbar(aes(x=m, ymin=meanProb-sdProb, 
                     ymax=meanProb+sdProb, col=meanA, 
                     width = 0.1)) +
   geom_line(aes(x=m, y=meanProb, group=meanA, col=meanA), 
-            stat='smooth', lwd=2, alpha=0.3) +
+            stat='smooth', lwd=2, alpha=0.2) +
   geom_line(aes(x=m, y=meanProbPred, col=meanA, 
                 lty=as_factor(meanA)), show.legend = F, lwd=1) + 
-  facet_grid(rows=vars(d), labeller = label_both) +
+  facet_grid(d~cvA, 
+             labeller = label_bquote(cols=paste("cv(", a[ij],")=", .(cvA)),
+                                     rows=paste("log(D)= ", .(d)))) +
   labs(x="nr of persisting species, m", 
-       y=expression(paste("fraction of patches, f"[m])), 
-       col="a")
+       y="fraction of patches with m species, f(m)", 
+       col=expression(paste(bar(a))))
 
-ggsave(paste0("../figures/fm.pdf"), width=3, height = 4, 
+ggsave(paste0("../figures/fm.pdf"), width=4, height = 4, 
        device = "pdf")
 
 ## showcase accuracy of mean r -----
