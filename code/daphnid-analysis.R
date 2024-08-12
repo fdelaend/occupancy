@@ -9,6 +9,7 @@ counts          <- read_csv("../data/Ebert/Frederik_data1/Daphnia_dynamics_1982_
   left_join(island_measures, by="island")
 
 pools           <- read_csv("../data/Ebert/Frederik_data1/Pools_coordinates_2017_vers7.csv") |>
+  filter(core == 1) |>
   left_join(island_measures, by="island") |>
   select(name, island, pool, latitude_corr, longitude_corr, cluster) |>
   mutate(meanLat = mean(latitude_corr), #compute centroid
@@ -17,7 +18,8 @@ pools           <- read_csv("../data/Ebert/Frederik_data1/Pools_coordinates_2017
 dessication     <- read_csv("../data/Ebert/Frederik_data1/Data_hydroperiod_Means.csv") |>
   separate_wider_delim(poolname, delim = "-", names = c("island", "pool")) |>
   left_join(island_measures, by="island") |>
-  summarise(dessication = mean(meandesi, na.rm = T), .by = "cluster") |>
+  summarise(dessication = sum(meandesi, na.rm = T), 
+            p=n(), .by = "cluster") |>
   remove_missing()
 
 #check out location of pools
@@ -47,13 +49,11 @@ test |>
   facet_grid(.~sample) 
 
 test |>
-  filter(richness==3) |>
   ggplot() +
   scale_color_viridis_d(option="plasma", end=0.9) +
   aes(x=dessication, y=fraction, col=as.factor(year)) + 
-  geom_point() + 
-  facet_grid(.~sample) #+
-  #geom_smooth(aes(color=as.factor(year)), method = lm, se=F)
+  geom_point(show.legend = F) + 
+  facet_grid(richness~sample, scales = "free", labeller = label_both) +
+  geom_smooth(aes(color=as.factor(year)), lwd=0.5, 
+              method = lm, se=F, show.legend = F)
 
-model <- lm(fraction ~ dessication + richness + dessication*richness,
-            data=test|>filter(richness==3))
