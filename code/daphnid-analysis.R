@@ -43,13 +43,6 @@ test<-counts |>
 
 test |>
   ggplot() +
-  scale_color_viridis_c(option="plasma", end=0.9) +
-  aes(x = richness, y=fraction, col=dessication) + 
-  geom_jitter() + 
-  facet_grid(.~sample) 
-
-test |>
-  ggplot() +
   scale_color_viridis_d(option="plasma", end=0.9) +
   aes(x=dessication, y=fraction, col=as.factor(year)) + 
   geom_point(show.legend = F) + 
@@ -57,3 +50,4 @@ test |>
   geom_smooth(aes(color=as.factor(year)), lwd=0.5, 
               method = lm, se=F, show.legend = F)
 
+ggsave("../figures/dessication.pdf", width=6, height=6)
