@@ -38,14 +38,15 @@ pools           <- read_csv("../data/Ebert/Frederik_data1/Pools_coordinates_2017
   left_join(island_measures, by="island") |>
   select(island, pool, latitude_corr, longitude_corr, cluster) 
 
-pH_conductivity |> 
+plant_cover |> 
   left_join(pools, by = join_by(island, pool), relationship =
               "many-to-many") |>
   ggplot() + 
   scale_color_viridis_c(option="plasma", end=0.9) +
-  aes(x=latitude_corr, y=longitude_corr, col=pH, 
+  aes(x=latitude_corr, y=longitude_corr, col=plants, 
       pch=as.factor(cluster)) + 
-  geom_point() 
+  geom_point() + 
+  facet_grid(sample~year)
 
 # ANALYSE DATA ----
 # compute heterogenity
