@@ -24,3 +24,5 @@ ggplot(baboons) +
   theme_bw() +
   aes(x=richness, col=`Social group`) + 
   geom_density()
+
+ggsave("../figures/baboon.pdf", width=3, height=2)
