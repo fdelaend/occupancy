@@ -32,10 +32,20 @@ pH_conductivity <- read_csv("../data/Ebert/Frederik_data1/MetapopData_pH_conduct
   mutate(pH = (pH-mean(pH))/sd(pH),
          log_conduct = (log_conduct-mean(log_conduct))/sd(log_conduct)) 
 
-ggplot(pH_conductivity) + 
-  aes(x=year, y=log_conduct, col=pool) + 
-  geom_point(show.legend = F) + 
-  geom_smooth(method = "lm", show.legend = F, se=F, lwd=0.5)
+#location of pools
+pools           <- read_csv("../data/Ebert/Frederik_data1/Pools_coordinates_2017_vers7.csv") |>
+  filter(core == 1) |>
+  left_join(island_measures, by="island") |>
+  select(island, pool, latitude_corr, longitude_corr, cluster) 
+
+pH_conductivity |> 
+  left_join(pools, by = join_by(island, pool), relationship =
+              "many-to-many") |>
+  ggplot() + 
+  scale_color_viridis_c(option="plasma", end=0.9) +
+  aes(x=latitude_corr, y=longitude_corr, col=pH, 
+      pch=as.factor(cluster)) + 
+  geom_point() 
 
 # ANALYSE DATA ----
 # compute heterogenity
@@ -84,14 +94,6 @@ test |>
 ggsave("../figures/dessication.pdf", width=6, height=6)
 
 # SUPPLEMENTS ----
-
-#check out location of pools
-pools           <- read_csv("../data/Ebert/Frederik_data1/Pools_coordinates_2017_vers7.csv") |>
-  filter(core == 1) |>
-  left_join(island_measures, by="island") |>
-  select(name, island, pool, latitude_corr, longitude_corr, cluster) |>
-  mutate(meanLat = mean(latitude_corr), #compute centroid
-         meanLong = mean(longitude_corr), .by = c("cluster"))
 
 ggplot(pools) +
   scale_color_viridis_d(option="plasma", end=0.9) +
