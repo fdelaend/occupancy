@@ -219,4 +219,3 @@ sample_ri <- function(samplesize=1, PDF, cutoff, ditch="below", ...){
 
 
 
-
