@@ -1,7 +1,7 @@
 
 # SIMULATIONS ----
 ## Simulations ------
-Sims <- expand_grid(n = c(6), meanA = c(0.2, 0.4, 0.8), #, 6; 0.4, 0.4, 0.6, 
+Sims <- expand_grid(n = c(6), meanA = c(0.2, 0.4, 0.8, 1.2), #, 6; 0.4, 0.4, 0.6, 
                     d = seq(-6,-4, length.out=6), vary=c(0, 0.1), k=c(1, 1.5),
                     cvA = c(0, 0.5), p = 100, rep = c(1:10)) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
   #Make parameters
@@ -12,8 +12,14 @@ Sims <- expand_grid(n = c(6), meanA = c(0.2, 0.4, 0.8), #, 6; 0.4, 0.4, 0.6,
       make_symmetric() %>% set_diagonal(d=1))) %>% 
   mutate(A = pmap(., make_block_diagonal)) %>% #make A spatial
   mutate(R = pmap(., make_R_spatial)) %>% #make spatial R (note that the emigration is subtracted later so this is the real local R)
-  mutate(D = pmap(., make_D)) %>% #make dispersal matrix
+  mutate(regularD = pmap(., make_D)) %>% #make classic dispersal matrix
+  mutate(coords = map(p, ~randomCoords(nPatch=.x)), #generate coordinates for every patch
+         distances = map(n, ~seq(4,0.5, length.out=.x))) %>% #generate characteristic distances of the species
+  mutate(exponentialD = map2(coords, distances, ~dispMatrixCommunityExp(coords=.x, #Make a D matrix for exponential decay
+                                                              dispDistanceVector=.y)),
+         exponentialD = map2(exponentialD, d, ~rescale_D(D=.x, d=.y))) %>%
   mutate(N0 = map(R, ~ .x*0+extinctionThreshold)) %>% #set initial conditions
+  pivot_longer(cols = c("regularD","exponentialD"), names_to = "dispType", values_to = "D") %>% # pivot the two sorts of D matrices to make them a factor
   #Simulate the network
   mutate(NHat = pmap(., get_NHat)) %>%
   #1/ Summarize: per m, compute the nr of patches and total biomass of an average patch
@@ -54,10 +60,10 @@ meanR  <- sum(pdfRs$x*pdfRs$y)/sum(pdfRs$y)#grant mean of R
 # INTERMEDIATE PREDICTIONS in absence of dispersal ----
 ## Make the predictions of f(m) and Ntotal -----
 IntPred <- Sims %>% 
-  # Select Sims w/o dispersal,  
+  # Select Sims w/o dispersal (select regularD although the same for both dispersal types),  
   # diffuse competition, and 
   # regional equivalence, and make predictions
-  filter(d==min(d), cvA==0, k==1, vary==0) %>%
+  filter(d==min(d), dispType=="regularD", meanA<1, cvA==0, k==1, vary==0) %>%
   # only select useful bits
   select(d, n, meanA, p, rep, summaryM, NTotalK, vary, cvA, k) %>%
   mutate(NTotalK = map_dbl(NTotalK, ~mean(.x$NTotalK))) %>% #mean regional density across sp
@@ -83,13 +89,13 @@ IntPredsAndSims <- Sims %>%
   unnest(summaryM) %>%
   mutate(m=as.numeric(as.character(m))) %>%
   mutate(fractionPatches = nrPatches/p) %>% #get simulated f(m)
-  select(all_of(c("d", "meanA", "n", "p", "rep", "m", "fractionPatches", 
+  select(all_of(c("d", "dispType", "meanA", "n", "p", "rep", "m", "fractionPatches", 
                   "cvA", "vary", "k"))) %>% #only keep relevant variables
   left_join(SelIntPred, by=c("d", "meanA", "n", "p", "rep", "m", "cvA", "vary", "k"),
             multiple = "all") %>% #join with predictions; 
   #makes sure that predictions are NA where dispersal is > min(d),
   #or where there is no regional equivalence
-  group_by(d, meanA, n, p, m, cvA, vary, k) %>% 
+  group_by(d, dispType, meanA, n, p, m, cvA, vary, k) %>% 
   #compute summary stats of predicted and simulated f(m) 
   #(mean and sd)
   summarise(meanProb = mean(fractionPatches),
@@ -100,7 +106,7 @@ IntPredsAndSims <- Sims %>%
 ## plot simulations vs. predictions of f(m); only take k==1 and vary==0 -----
 IntPredsAndSims %>% 
   mutate(d=round(log10(d),1)) %>%
-  filter(k==1, d %in% c(-6, -5.2, -4.4), vary==0) %>% 
+  filter(k==1, dispType=="regularD", d %in% c(-6, -5.2, -4.4), vary==0) %>% 
   ggplot() + 
   theme_bw() +
   scale_linetype_manual(values=rep("dashed", 1000)) + 
@@ -231,6 +237,7 @@ ggsave(paste0("../figures/case2.pdf"), probExc,
 
 ## Summarize simulated data and add predictions and plot -----
 Sims %>% #selection of Sims
+  filter(dispType == "exponentialD", meanA<1) %>%
   select(all_of(c("rep", "n", "meanA", "d", "propPatchesN", "vary", "cvA", "k"))) %>%
   group_by(n, meanA, d, vary, cvA, k) %>%
   summarise(meanProb = mean(propPatchesN, na.rm = T), 
