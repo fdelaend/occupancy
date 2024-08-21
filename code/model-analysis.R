@@ -3,7 +3,7 @@
 ## Simulations ------
 Sims <- expand_grid(n = c(6), meanA = c(0.2, 0.4, 0.8, 1.2), #, 6; 0.4, 0.4, 0.6, 
                     d = seq(-6,-4, length.out=6), vary=c(0, 0.1), k=c(1, 1.5),
-                    cvA = c(0, 0.5), p = 100, rep = c(1:10)) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
+                    cvA = c(0, 0.5), p = 100, rep = c(1:5)) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
   #Make parameters
   mutate(d = 10^d,
          sdA = cvA * meanA) %>%
@@ -262,7 +262,7 @@ Sims %>% #selection of Sims
        y="Patch occupancy", col=expression(paste(bar(a))), 
        alpha="k")
 
-ggsave(paste0("../figures/feasPred.pdf"), width=5, height = 3, 
+ggsave(paste0("../figures/feasExponential.pdf"), width=5, height = 3, 
        device = "pdf")  
 
 ## Probability for extinction w/o disp. (theory and sims) --------
