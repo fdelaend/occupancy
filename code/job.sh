@@ -2,7 +2,7 @@
 
 #SBATCH --job-name=Occupancy
 #SBATCH --array=1-100
-#SBATCH --time=00:00:00 # hh:mm:ss
+#SBATCH --time=00:30:00 # hh:mm:ss
 #
 #SBATCH --ntasks=1 
 #SBATCH --mem-per-cpu=500 # megabytes 
@@ -11,12 +11,10 @@
 #SBATCH --mail-user=frederik.delaender@unamur.be
 #SBATCH --mail-type=ALL
 #
-#SBATCH --comment=Feasibility
+#SBATCH --comment=Occupancy
 
 ml purge
 
-ml releases/2020b
+ml R
 
-ml R/4.0.4-foss-2020b
-
-Rscript Feasibility_computations_cluster.R $SLURM_ARRAY_TASK_ID
+Rscript model-simulations.R $SLURM_ARRAY_TASK_ID
