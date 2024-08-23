@@ -1,5 +1,4 @@
 library(mvtnorm)
-library(tidyverse)
 library(pracma)
 library(gridExtra)
 library(feasoverlap)

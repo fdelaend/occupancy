@@ -1,4 +1,5 @@
 
+source("tools-simulations.R")
 source("tools-other.R")
 #Sims <- readRDS("../data/data.rds")
 
@@ -62,7 +63,7 @@ IntPredsAndSims <- Sims %>%
 IntPredsAndSims %>% 
   mutate(d=round(log10(d),1)) %>%
   filter(k==1, dispType=="regularD", 
-         d %in% c(-6, -5.2, -4.4), vary==0, p==20) %>% 
+         d %in% c(-6, -5.2, -4.4), vary==0, p==10) %>% 
   ggplot() + 
   theme_bw() +
   scale_linetype_manual(values=rep("dashed", 1000)) + 

@@ -12,7 +12,7 @@ extinctionThreshold <- 1e-3
 make_block_diagonal <- function(A, p, vary = 0, ...) {
   A_temp <- array(0, dim=dim(A)*p) # all zeros
   for (i in 1:p) {
-    A_vary <- array(data = runif(prod(dim(A)), 1 - vary, 1 - vary), dim = dim(A)) #local deviation of A in block i
+    A_vary <- array(data = runif(prod(dim(A)), 1 - vary, 1 + vary), dim = dim(A)) #local deviation of A in block i
     A_temp[(ncol(A)*i-ncol(A)+1):(ncol(A)*i), (ncol(A)*i-ncol(A)+1):(ncol(A)*i)] <- A * A_vary
     }
   return(A_temp)
