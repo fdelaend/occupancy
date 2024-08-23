@@ -4,66 +4,68 @@ source("tools-other.R")
 #Sims <- readRDS("../data/data.rds")
 
 ## Recover the distribution of the growth rates --------
-Rs     <- Sims %>% filter(d==min(d), meanA==0.8, rep==1, k==1) %>% select(n, R, NHat) %>% 
-  mutate(NHat = map2(R, NHat, ~ .y %>% mutate(R=.x))) %>%
-  #filter(n==6) %>%
-  select(-R) %>%
-  unnest(NHat) %>%
-  select(-density, -sp)
+Rs     <- Sims |> 
+  #Only keep a single network, since the same Rs are being sampled everywhere
+  filter(d==min(d), meanA==0.2, vary==0, k==1, cvA==0, p==100, 
+         rep==1) |> 
+  select(R) |>
+  unnest(R)
 pdfRs  <- density(Rs$R, from=0)
 meanR  <- sum(pdfRs$x*pdfRs$y)/sum(pdfRs$y)#grant mean of R
 
 # INTERMEDIATE PREDICTIONS in absence of dispersal ----
 ## Make the predictions of f(m) and Ntotal -----
-IntPred <- Sims %>% 
+IntPred <- Sims |> #Start with simulations to obtain the predictor values (same settings) 
   # Select Sims w/o dispersal (select regularD although the same for both dispersal types),  
-  # diffuse competition, and 
+  # stable matrices, diffuse competition, and 
   # regional equivalence, and make predictions
-  filter(d==min(d), dispType=="regularD", meanA<1, cvA==0, k==1, vary==0) %>%
-  # only select useful bits
-  select(d, n, meanA, p, rep, summaryM, NTotalK, vary, cvA, k) %>%
-  mutate(NTotalK = map_dbl(NTotalK, ~mean(.x$NTotalK))) %>% #mean regional density across sp
-  mutate(summaryM = pmap(., function(summaryM, meanA, n, ...) { #add predictions
-    summaryM %>%
-    mutate(m=as.numeric(as.character(m))) %>%
-    rowwise() %>%
-    mutate(fractionPatchesPredicted = get_fraction_m(meanA=meanA, m=m, n=n)) %>% #predicted total density in a patch of m persisting sp
-    ungroup() %>%
-    mutate(meanRPerPredicted = get_RMeanM(a=meanA, m=m, n=n, r=meanR),#predicted mean r of persisting sp
-           meanRExcPredicted = (-meanRPerPredicted*m+n*meanR)/(n-m),#predicted mean r of excluded sp
-           NTotalPredicted = get_N_total(meanA=meanA, n=m, r=meanRPerPredicted))})) %>% #predicted total density for a patch with m species
-  mutate(NTotalKPredicted = p/n*map_dbl(summaryM, ~sum(.x$fractionPatchesPredicted * .x$NTotalPredicted))) #Total regional density for a species
+  filter(d==min(d), dispType=="regularD", meanA<1, cvA==0, k==1, vary==0) |>
+  # only select useful bits (not the large matrices; makes it run/show faster)
+  select(n, meanA, d, vary, k, p, rep, summaryM, NTotalK, cvA) |>
+  mutate(NTotalK = map_dbl(NTotalK, ~mean(.x$NTotalK))) |> #mean regional density across sp
+  (\(x) mutate(x, summaryM = pmap(x, \(summaryM, meanA, n, ...)
+                                  summaryM |>
+                                    mutate(m=as.numeric(as.character(m))) |>
+                                    rowwise() |>
+                                    mutate(fractionPatchesPredicted = get_fraction_m(meanA=meanA, m=m, n=n)) |> #predicted total density in a patch of m persisting sp
+                                    ungroup() |>
+                                    mutate(meanRPerPredicted = get_RMeanM(a=meanA, m=m, n=n, r=meanR),#predicted mean r of persisting sp
+                                           meanRExcPredicted = (-meanRPerPredicted*m+n*meanR)/(n-m),#predicted mean r of excluded sp
+                                           NTotalPredicted = get_N_total(meanA=meanA, n=m, r=meanRPerPredicted)))))() |> #predicted total density for a patch with m species
+  mutate(NTotalKPredicted = p/n*map_dbl(summaryM, ~ (.x |> 
+                                          mutate(NperM = fractionPatchesPredicted * NTotalPredicted)|>
+                                          summarise(sum(NperM)))[[1]])) #Total regional density for a species
 
 ## Unnest and only keep those variables that are for now relevant ---
-SelIntPred <- IntPred %>%
-  unnest(summaryM) %>%
+SelIntPred <- IntPred |>
+  unnest(summaryM) |>
   select(all_of(c("d", "meanA", "n", "p", "rep", "m", "fractionPatchesPredicted", 
                   "cvA", "vary", "k")))
 
 ## Add predictions of f(m) to simulations -----
-IntPredsAndSims <- Sims %>%
-  unnest(summaryM) %>%
-  mutate(m=as.numeric(as.character(m))) %>%
-  mutate(fractionPatches = nrPatches/p) %>% #get simulated f(m)
+IntPredsAndSims <- Sims |>
+  unnest(summaryM) |>
+  mutate(m=as.numeric(as.character(m))) |>
+  mutate(fractionPatches = nrPatches/p) |> #get simulated f(m)
   select(all_of(c("d", "dispType", "meanA", "n", "p", "rep", "m", "fractionPatches", 
-                  "cvA", "vary", "k"))) %>% #only keep relevant variables
+                  "cvA", "vary", "k"))) |> #only keep relevant variables
   left_join(SelIntPred, by=c("d", "meanA", "n", "p", "rep", "m", "cvA", "vary", "k"),
-            multiple = "all") %>% #join with predictions; 
+            multiple = "all") |> #join with predictions; 
   #makes sure that predictions are NA where dispersal is > min(d),
   #or where there is no regional equivalence
-  group_by(d, dispType, meanA, n, p, m, cvA, vary, k) %>% 
   #compute summary stats of predicted and simulated f(m) 
   #(mean and sd)
   summarise(meanProb = mean(fractionPatches),
             sdProb = sd(fractionPatches),
             meanProbPred = mean(fractionPatchesPredicted),
-            sdProbPred = sd(fractionPatchesPredicted))
+            sdProbPred = sd(fractionPatchesPredicted), 
+            .by=c("d", "dispType", "meanA", "n", "p", "m", "cvA", "vary", "k"))
 
 ## plot simulations vs. predictions of f(m); only take k==1 and vary==0 -----
-IntPredsAndSims %>% 
-  mutate(d=round(log10(d),1)) %>%
+IntPredsAndSims |> 
+  mutate(d=round(log10(d),1)) |>
   filter(k==1, dispType=="regularD", 
-         d %in% c(-6, -5.2, -4.4), vary==0, p==10) %>% 
+         d %in% c(-6, -5.2, -4.4), vary==0, p==100) |> 
   ggplot() + 
   theme_bw() +
   scale_linetype_manual(values=rep("dashed", 1000)) + 
@@ -86,11 +88,12 @@ ggsave(paste0("../figures/fm.pdf"), width=4.5, height = 3,
        device = "pdf")
 
 ## Plot predicted vs. simulated NtotalK ----
-NtotalK <- ggplot(IntPred %>% group_by(meanA) %>% 
-         summarise(meanNTotalK = mean(NTotalK),
-                   sdNTotalK = sd(NTotalK),
-                   meanNTotalKPredicted = mean(NTotalKPredicted),
-                   sdNTotalKPredicted = sd(NTotalKPredicted))) + 
+NtotalK <- ggplot(IntPred |>
+                    summarise(meanNTotalK = mean(NTotalK),
+                              sdNTotalK = sd(NTotalK),
+                              meanNTotalKPredicted = mean(NTotalKPredicted),
+                              sdNTotalKPredicted = sd(NTotalKPredicted),
+                              .by = meanA)) + 
   theme_bw() +
   scale_color_viridis_c(option="plasma", end=0.9) +
   aes(x=meanA, y=meanNTotalK) + 
@@ -110,49 +113,41 @@ ggsave(paste0("../figures/Nk.pdf"), width=4, height = 3,
 
 # PREDICTIONS OF PATCH OCCUPANCY -----
 ## Make the predictions for when all assumptions are met
-Predictions <- IntPred %>%
-  filter(rep==1) %>% #Select 1st replicate
-  select(-c("rep", "k", "cvA", "vary", "d")) %>% #Remove irrelevant variables
-  mutate(sampleSize = 1000) %>% #set sample size for probability calculations
-  mutate(samples = pmap(., function(summaryM, sampleSize, meanA, NTotalKPredicted, p, ...){
-    tibble(m = sample(x=summaryM$m, size=sampleSize, prob = summaryM$fractionPatchesPredicted, replace=T)) %>% #sample m according to f(m). Every sample is a hypothetical patch      
-      left_join(summaryM, by="m", multiple="all") %>% #get variables that match the sampled m
-      select(all_of(c("m", "NTotalPredicted", "meanRPerPredicted", "meanRExcPredicted"))) %>%
-      rowwise() %>%       
-      #sample 1 growth rate per hypo patch, from distribution of R such that IGR<0 (for riExc) or >0 (for riPer) 
-      mutate(riExc=sample_ri(samplesize=1, PDF=pdfRs, cutoff=meanA*NTotalPredicted, ditch="above"),
-             riPer=sample_ri(samplesize=1, PDF=pdfRs, cutoff=meanA*NTotalPredicted, ditch="below")) %>%
-      ungroup() %>%
-      mutate(N0i=get_N0i(a=meanA, n=m, r=meanRPerPredicted, ri=riPer), #predict density of persisting sp in absence of dispersal
-             N1iExc=get_N1iExc(NTotalK=NTotalKPredicted, ri=riExc, a=meanA, NTotalPredicted), #density contribution per unit of dispersal, in case of exclusion w/o dispersal
-             NegIGR=1/get_N1iExc(NTotalK=1, ri=riExc, a=meanA, NTotalPredicted), #negative IGR
-             rhoi = NTotalKPredicted/p*(p-1)/N0i)})) %>% #ratio of total to local density
-  mutate(means = map(samples, ~ .x %>% group_by(m) %>% 
+Predictions <- IntPred |>
+  filter(rep==1) |> #Select 1st replicate
+  select(-c("rep", "k", "cvA", "vary", "d")) |> #Remove irrelevant variables
+  mutate(sampleSize = 1000) |> #set sample size for probability calculations
+  (\(x) mutate(x, samples = pmap(x, sample_random)))() |>
+  mutate(means = map(samples, ~ .x |>  
                        summarize(meanN1iExc=mean(N1iExc, na.rm=T), #mean across patches of Ni1 in case of exclusion w/o dispersal. Because we sample 1 species per patch, this is the same as taking a mean across species
-                                 rho = mean(rhoi, na.rm=T)))) %>% #same type of mean, but now of rhoi 
-  mutate(samples = map2(samples, means, ~.x %>% #add means to samples
-                          left_join(.y, by="m"))) %>%
-  expand_grid(d = seq(-6,-4, length.out=60)) %>% #Create a gradient of dispersal values
-  mutate(d=10^d) %>%
-  mutate(samples = pmap(., function(samples, d, meanA, n, p, ...){ samples %>%
-      mutate(N1iPer = get_N1iPer(a=meanA, n=n, m=m, rho=rho, #N1i when i persists w/o disp.
-                                 rhoi=rhoi, meanN1iExc=meanN1iExc, p=p), 
-             NiExc = d*N1iExc, #Ni when i is excluded w/o disp.
-             NiPer = N0i+d*N1iPer)})) %>% #Ni when i persists w/o disp.
+                                 rho = mean(rhoi, na.rm=T),
+                                 .by = m))) |> #same type of mean, but now of rhoi 
+  mutate(samples = map2(samples, means, ~.x |> #add means to samples
+                          left_join(.y, by = join_by(m)))) |>
+  expand_grid(d = seq(-6,-4, length.out=60)) |> #Create a gradient of dispersal values
+  mutate(d=10^d) |>
+  (\(x) mutate(x, samples = pmap(x, sample_random_Ni)))() |>
   mutate(probExc = map_dbl(samples, ~sum(.x$NiExc>extinctionThreshold)/length(.x$NiExc)), #Compute probabilities that > threshold
-         probPer = map_dbl(samples, ~sum(.x$NiPer>extinctionThreshold)/length(.x$NiPer))) %>%
-  mutate(summaryM = map2(summaryM, n, ~.x %>%
-                             mutate(probN0iExt = fractionPatchesPredicted*(1-m/.y)))) %>%#proba that Ni is absent from patches with m sp (w/o disp)
+         probPer = map_dbl(samples, ~sum(.x$NiPer>extinctionThreshold)/length(.x$NiPer))) |>
+  mutate(summaryM = map2(summaryM, n, ~.x |>
+                             mutate(probN0iExt = fractionPatchesPredicted*(1-m/.y)))) |> #proba that Ni is absent from patches with m sp (w/o disp)
   mutate(probN0iExt = map_dbl(summaryM, ~sum(.x$probN0iExt)), #overall proba across all patches
          probN0iPer = 1-probN0iExt,
-         prob = (probExc*probN0iExt + probPer*probN0iPer)^n) %>% #grant prob
+         prob = (probExc*probN0iExt + probPer*probN0iPer)^n) |> #grant prob
+  mutate(fm = map(summaryM, ~as_vector(.x |> select(all_of(c("m", "nrPatches"))) |>
+                    mutate(fm = nrPatches/sum(nrPatches)) |>
+                    select(fm))),
+         m = map(summaryM, ~as_vector(.x |> select(m)))) |>
+  (\(x) mutate(x, A = pmap(x, make_A)))() |>
+  mutate(Xi = map_dbl(A, ~feasibility(.x))) |>
+  (\(x) mutate(x, prob2 = pmap_dbl(x, get_patch_occupancy)))() |>
   select(-summaryM)
 
 ## Illustrate predictions of NtotalK and negative IGR ----
-NegIGR <- Predictions %>% 
-  filter(d==min(d)) %>%
-  select(all_of(c("meanA", "samples"))) %>%
-  unnest(samples) %>%
+NegIGR <- Predictions |> 
+  filter(d==min(d)) |>
+  select(all_of(c("meanA", "samples"))) |>
+  unnest(samples) |>
   ggplot() +
   theme_bw() +
   scale_color_viridis_c(option="plasma", end=0.9) +

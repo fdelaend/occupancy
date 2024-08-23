@@ -6,7 +6,7 @@ parallel_id <- Sys.getenv('SLURM_ARRAY_TASK_ID')
 ## Simulations ------
 Sims <- expand_grid(n = c(6), meanA = c(0.2, 0.4, 0.8, 1), #, 6; 0.4, 0.4, 0.6, 
                     d = seq(-6,-4, length.out=6), vary=c(0, 0.1), k=c(1, 1.5),
-                    cvA = c(0, 0.2), p = c(3, 10), rep = parallel_id) |> #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
+                    cvA = c(0, 0.2), p = c(10, 50, 100), rep = parallel_id) |> #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
   #Make parameters: d, sdA
   mutate(d = 10^d,
          sdA = cvA * meanA) |>

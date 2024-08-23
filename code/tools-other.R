@@ -102,11 +102,52 @@ sample_ri <- function(samplesize=1, PDF, cutoff, ditch="below", ...){
 
 # Get patch occupancy
 # Input:
-# -fm: distribution of number of coexisting species across network
-# -pPersist: probability for a species to persist if it does not persist without dispersal
+# -fm: fraction of patches with m coexisting species
+# -m: nr of coexisting species, in same order as fm
+# -probExc: probability for a species to persist if it does not persist without dispersal
 # -n: total number (i.e. number of regionally available) species
 # -Xi: feasibility for n species
-get_patch_occupancy <- function(fm, pPersist, n, Xi, ...){
-  sum(fm*pPersist^(n-c(1:n)))*(1-Xi) + Xi
+get_patch_occupancy <- function(fm, probExc, n, m, Xi, ...){
+  sum(fm*probExc^(n-m))*(1-Xi) + Xi
 }
+
+#Sample the random variables needed to predict patch occupancy
+#Input:
+# -summaryM: a tibble with the number of species in a patch (m),
+# the total biomass (NTotal), given m, 
+# the mean growth rate of the persisting species (meanRPer),
+# the predicted fraction of patches in which m species persist
+#Output:
+# - samples: a tibble with samples for 
+# m, riExc (growth rate of sp excluded w/o disp), 
+# riPer (growth rate of sp persisting w/o disp),
+# N0i (density w/o disp of a sp persisting w/o disp)
+# N1iExc (contribution of a unit dispersal to density of a sp excluded w/o disp)
+# NegIGR (negative invasion growth rate of sp excluded w/o disp)
+# rhoi (ratio of local vs. mean regional abundance)
+sample_random <- function(summaryM, sampleSize, meanA, NTotalKPredicted, p, ...){
+  tibble(m = sample(x=summaryM$m, size=sampleSize, prob = summaryM$fractionPatchesPredicted, replace=T)) %>% #sample m according to f(m). Every sample is a hypothetical patch      
+    left_join(summaryM, by="m", multiple="all") %>% #get variables that match the sampled m
+    select(all_of(c("m", "NTotalPredicted", "meanRPerPredicted", "meanRExcPredicted"))) %>%
+    rowwise() %>%       
+    #sample 1 growth rate per hypo patch, from distribution of R such that IGR<0 (for riExc) or >0 (for riPer) 
+    mutate(riExc=sample_ri(samplesize=1, PDF=pdfRs, cutoff=meanA*NTotalPredicted, ditch="above"),
+           riPer=sample_ri(samplesize=1, PDF=pdfRs, cutoff=meanA*NTotalPredicted, ditch="below")) %>%
+    ungroup() %>%
+    mutate(N0i=get_N0i(a=meanA, n=m, r=meanRPerPredicted, ri=riPer), #predict density of persisting sp in absence of dispersal
+           N1iExc=get_N1iExc(NTotalK=NTotalKPredicted, ri=riExc, a=meanA, NTotalPredicted), #density contribution per unit of dispersal, in case of exclusion w/o dispersal
+           NegIGR=1/get_N1iExc(NTotalK=1, ri=riExc, a=meanA, NTotalPredicted), #negative IGR
+           rhoi = NTotalKPredicted/p*(p-1)/N0i)}
+
+# Samples random values for Ni (density of i with dispersal)
+# Input:
+# - samples: output from sample_random
+# - d (dispersal rate), meanA (mean comp. interaction strength),
+# - n (nr of sp), p (nr of patches)
+sample_random_Ni <- function(samples, d, meanA, n, p, ...){ 
+  samples |>
+    mutate(N1iPer = get_N1iPer(a=meanA, n=n, m=m, rho=rho, #N1i when i persists w/o disp.
+                               rhoi=rhoi, meanN1iExc=meanN1iExc, p=p), 
+           NiExc = d*N1iExc, #Ni when i is excluded w/o disp.
+           NiPer = N0i+d*N1iPer)}
  

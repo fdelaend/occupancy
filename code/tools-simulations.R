@@ -52,6 +52,11 @@ make_symmetric <- function(A){
   A*upper.tri(A) + t(A)*lower.tri(A)
 }
 
+#make basic A matrix with diagonal to one
+make_A <- function(meanA=0.6, sdA=0, n=3, ...) {
+  matrix(data = rnorm(n^2, meanA, sdA), ncol = n) |>
+    set_diagonal(d=1)
+}
 #generates p intrinsic growth rate vectors, stacked underneath each other
 #for use in spatial LV simulations
 #negative_sign is a vector telling which species needs to have a negative intrinsic growth rate
