@@ -134,10 +134,9 @@ Predictions <- IntPred |>
   mutate(probN0iExt = map_dbl(summaryM, ~sum(.x$probN0iExt)), #overall proba across all patches
          probN0iPer = 1-probN0iExt,
          prob = (probExc*probN0iExt + probPer*probN0iPer)^n) |> #grant prob
-  mutate(fm = map(summaryM, ~as_vector(.x |> select(all_of(c("m", "nrPatches"))) |>
+  mutate(fm = map(summaryM, ~ .x |> select(all_of(c("m", "nrPatches"))) |>
                     mutate(fm = nrPatches/sum(nrPatches)) |>
-                    select(fm))),
-         m = map(summaryM, ~as_vector(.x |> select(m)))) |>
+                    select(all_of(c("m", "fm"))))) |>
   (\(x) mutate(x, A = pmap(x, make_A)))() |>
   mutate(Xi = map_dbl(A, ~feasibility(.x))) |>
   (\(x) mutate(x, prob2 = pmap_dbl(x, get_patch_occupancy)))() |>
@@ -189,7 +188,7 @@ ggsave(paste0("../figures/case2.pdf"), probExc,
 
 ## Summarize simulated data and add predictions and plot -----
 Sims %>% #selection of Sims
-  filter(dispType == "exponentialD", meanA<1) %>%
+  filter(dispType == "regularD", meanA<1) %>%
   select(all_of(c("rep", "n", "meanA", "d", "propPatchesN", "vary", "cvA", "k"))) %>%
   group_by(n, meanA, d, vary, cvA, k) %>%
   summarise(meanProb = mean(propPatchesN, na.rm = T), 

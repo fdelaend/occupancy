@@ -107,8 +107,13 @@ sample_ri <- function(samplesize=1, PDF, cutoff, ditch="below", ...){
 # -probExc: probability for a species to persist if it does not persist without dispersal
 # -n: total number (i.e. number of regionally available) species
 # -Xi: feasibility for n species
-get_patch_occupancy <- function(fm, probExc, n, m, Xi, ...){
-  sum(fm*probExc^(n-m))*(1-Xi) + Xi
+get_patch_occupancy <- function(fm, probExc, n, Xi, ...){
+  fm |>
+    filter(m<n) |>
+    mutate(term = fm*probExc^(n-m)) |>
+    summarize(sum(term)) |>
+    (\(x) x*(1-Xi) + Xi)() |>
+    as_vector()
 }
 
 #Sample the random variables needed to predict patch occupancy
