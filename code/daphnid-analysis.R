@@ -1,4 +1,6 @@
 
+library(tidyverse)
+
 # READ DATA ----
 island_measures <- read_csv("../data/Ebert/Frederik_data1/Island_measures_vers4.csv") |>
   select(island, group_100, group_200) |>
@@ -91,12 +93,13 @@ test<-counts |>
 test |>
   ggplot() +
   scale_color_viridis_d(option="plasma", end=0.9) +
-  aes(x=desiccation, y=fraction, col=as.factor(year)) + 
+  aes(x=p, y=fraction, col=as.factor(year)) + 
   geom_point(show.legend = F) + 
   facet_grid(richness~sample, scales = "free", labeller = label_both) +
   geom_smooth(lwd=0.5, method = lm, se=F, show.legend = F)
 
-# ggsave("../figures/desiccation.pdf", width=6, height=6)
+# ggsave("../figures/desiccation.pdf", width=6, height=4)
+# ggsave("../figures/p.pdf", width=6, height=4)
 
 # Hard to see so check out the slopes of fraction vs. predictor (p or desiccation)
 slopes <- test %>%
@@ -112,6 +115,7 @@ ggplot(slopes) +
   facet_grid(predictor~sample, scales = "free", labeller = label_both) +
   geom_hline(yintercept = 0) +
   labs(x = "richness", y = "effect")
+# ggsave("../figures/slope.pdf", width=6, height=4)
 
 #Dominance of a given species?
 dom <- counts |>
@@ -139,6 +143,8 @@ ggplot(dom) +
   geom_point(show.legend = F) + 
   facet_grid(sample~species) +
   geom_smooth(lwd=0.5, method = lm, se=F, show.legend = F)
+# ggsave("../figures/dom.pdf", width=6, height=4)
+
 
 # Result 1: effect of mean desiccation: more single sp patches, fewer pairs, a bit more triplets
 # Result 2: effect of nr of patches: fewer single sp patches 

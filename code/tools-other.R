@@ -113,6 +113,7 @@ get_patch_occupancy <- function(fm, probExc, n, Xi, ...){
     mutate(term = fm*probExc^(n-m)) |>
     summarize(sum(term)) |>
     (\(x) x*(1-Xi) + Xi)() |>
+    #(\(x) x + Xi)() |>
     as_vector()
 }
 

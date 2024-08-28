@@ -204,7 +204,7 @@ Sims %>% #selection of Sims
                     ymax=meanProb+sdProb, 
                     col=meanA, alpha=as.factor(k)), width=0.1) +
   geom_line(data=Predictions, 
-            aes(x=log10(d), y=prob, col=meanA, lty=as_factor(meanA)), 
+            aes(x=log10(d), y=prob2, col=meanA, lty=as_factor(meanA)), 
             show.legend = F) +
   facet_grid(cols=vars(cvA), rows=vars(vary), 
              labeller = label_bquote(cols=paste("cv(", a[ij],")=", .(cvA)),
