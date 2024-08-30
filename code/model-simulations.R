@@ -50,4 +50,4 @@ Sims <- expand_grid(n = c(6), meanA = c(0.2, 0.4, 0.8, 1), #, 6; 0.4, 0.4, 0.6,
   mutate(NTotalK = map(NHat, ~ .x |> 
                          summarize(NTotalK = sum(density), .by = sp)))
 
-saveRDS(Sims, file=paste("../data-cluster/",parallel_id,"data.RDS",sep=""))
+saveRDS(Sims, file=paste("../simulated-data/",parallel_id,"data.RDS",sep=""))
