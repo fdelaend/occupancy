@@ -5,7 +5,7 @@
 #SBATCH --time=00:30:00 # hh:mm:ss
 #
 #SBATCH --ntasks=1 
-#SBATCH --mem-per-cpu=500 # megabytes 
+#SBATCH --mem-per-cpu=10G # megabytes 
 #SBATCH --partition=batch
 #
 #SBATCH --mail-user=frederik.delaender@unamur.be
