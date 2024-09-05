@@ -49,7 +49,7 @@ Sims <- expand_grid(n = c(6), meanA = c(0.2, 0.4, 0.8, 1), #, 6; 0.4, 0.4, 0.6,
   #3/total density across all patches of a species
   mutate(NTotalK = map(NHat, ~ .x |> 
                          summarize(NTotalK = sum(density), .by = sp))) |>
-  select(!A & !R & !D & !distances & !N0 & !coords) #ditch all unneeded data
+  select(!A & !D & !distances & !N0 & !coords) #ditch all unneeded data
 
 
 saveRDS(Sims, file=paste("../simulated-data/",parallel_id,"data.RDS",sep=""))

@@ -161,6 +161,6 @@ sample_random_Ni <- function(samples, d, meanA, n, p, ...){
 # and ditch the variables that take up lots of memory and won't be used
 read_simulations <- function(file){
   readRDS(file) |>
-    select(!A & !R & !D & !distances & !N0 & !coords)
+    select(!A & !D & !distances & !N0 & !coords)
 }
 
