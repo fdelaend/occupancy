@@ -20,55 +20,61 @@ Rs     <- Sims |>
 pdfRs  <- density(Rs$R, from=0)
 meanR  <- sum(pdfRs$x*pdfRs$y)/sum(pdfRs$y)#grant mean of R
 
-# INTERMEDIATE PREDICTIONS in absence of dispersal ----
-## Make the predictions of f(m) and Ntotal -----
-IntPred <- Sims |> #Start with simulations to obtain the predictor values (same settings) 
-  # Select Sims w/o dispersal (select regularD although the same for both dispersal types),  
+# INTERMEDIATE PREDICTIONS: ----
+## Make the predictions of fm and NTotalK -----
+IntPred <- Sims |> #Start with simulations to obtain the predictor values (to make sure we're predicting for exactly the same parameter values) 
+  # Select Simulations w/o dispersal (select regularD although the same for both dispersal types),  
   # stable matrices, diffuse competition, and 
   # regional equivalence, and make predictions
-  filter(d==min(d), dispType=="regularD", meanA<1, cvA==0, k==1, vary==0) |>
-  # only select useful bits (not the large matrices; makes it run/show faster)
-  select(n, meanA, d, vary, k, p, rep, summaryM, NTotalK, cvA) |>
+  filter(meanA<1, d==min(d), vary==0, k==1, cvA==0, 
+         dispType=="regularD") |>
+  # *Measure* total density across all patches, mean across species (NTotalK)
   mutate(NTotalK = map_dbl(NTotalK, ~mean(.x$NTotalK))) |> #mean regional density across sp
+  # *Predict*, for each level of local richness m: 
+  # -fm: expected fraction of patches with richness=m (fmPredicted),
+  # -mean r of persisting sp (meanRPerPredicted)
+  # -mean r of excluded sp (meanRExcPredicted) 
+  # -total density across all patches, mean across species (NTotalPredicted)
   (\(x) mutate(x, summaryM = pmap(x, \(summaryM, meanA, n, ...)
                                   summaryM |>
                                     mutate(m=as.numeric(as.character(m))) |>
                                     rowwise() |>
-                                    mutate(fractionPatchesPredicted = get_fraction_m(meanA=meanA, m=m, n=n)) |> #predicted total density in a patch of m persisting sp
+                                    mutate(fmPredicted = get_fraction_m(meanA=meanA, m=m, n=n)) |> #predicted total density in a patch of m persisting sp
                                     ungroup() |>
                                     mutate(meanRPerPredicted = get_RMeanM(a=meanA, m=m, n=n, r=meanR),#predicted mean r of persisting sp
                                            meanRExcPredicted = (-meanRPerPredicted*m+n*meanR)/(n-m),#predicted mean r of excluded sp
                                            NTotalPredicted = get_N_total(meanA=meanA, n=m, r=meanRPerPredicted)))))() |> #predicted total density for a patch with m species
+  # Predict total regional density (same for all species)
   mutate(NTotalKPredicted = p/n*map_dbl(summaryM, ~ (.x |> 
-                                          mutate(NperM = fractionPatchesPredicted * NTotalPredicted)|>
+                                          mutate(NperM = fmPredicted * NTotalPredicted)|>
                                           summarise(sum(NperM)))[[1]])) #Total regional density for a species
 
 ## Unnest and only keep those variables that are for now relevant ---
 SelIntPred <- IntPred |>
   unnest(summaryM) |>
-  select(all_of(c("d", "meanA", "n", "p", "rep", "m", "fractionPatchesPredicted", 
-                  "cvA", "vary", "k")))
+  select(all_of(c("n", "meanA", "d", "vary", "k", "cvA", "dispType",
+                  "p", "rep", "m", "fmPredicted")))
 
-## Add predictions of f(m) to simulations -----
+## Add predictions of fm to simulations -----
 IntPredsAndSims <- Sims |>
   unnest(summaryM) |>
   mutate(m=as.numeric(as.character(m))) |>
-  mutate(fractionPatches = nrPatches/p) |> #get simulated f(m)
+  mutate(fractionPatches = nrPatches/p) |> #get simulated fm
   select(all_of(c("d", "dispType", "meanA", "n", "p", "rep", "m", "fractionPatches", 
                   "cvA", "vary", "k"))) |> #only keep relevant variables
-  left_join(SelIntPred, by=c("d", "meanA", "n", "p", "rep", "m", "cvA", "vary", "k"),
+  left_join(SelIntPred, by=c("d", "meanA", "n", "p", "rep", "m", "cvA", "vary", "k", "dispType"),
             multiple = "all") |> #join with predictions; 
   #makes sure that predictions are NA where dispersal is > min(d),
   #or where there is no regional equivalence
-  #compute summary stats of predicted and simulated f(m) 
+  #compute summary stats of predicted and simulated fm 
   #(mean and sd)
   summarise(meanProb = mean(fractionPatches),
             sdProb = sd(fractionPatches),
-            meanProbPred = mean(fractionPatchesPredicted),
-            sdProbPred = sd(fractionPatchesPredicted), 
+            meanProbPred = mean(fmPredicted),
+            sdProbPred = sd(fmPredicted), 
             .by=c("d", "dispType", "meanA", "n", "p", "m", "cvA", "vary", "k"))
 
-## plot simulations vs. predictions of f(m); only take k==1 and vary==0 -----
+## plot simulations vs. predictions of fm; only take k==1 and vary==0 -----
 IntPredsAndSims |> 
   mutate(d=round(log10(d),1)) |>
   filter(k==1, dispType=="regularD", 
@@ -88,7 +94,7 @@ IntPredsAndSims |>
              labeller = label_bquote(rows=paste("cv(", a[ij],")=", .(cvA)),
                                      cols=paste("log(D)= ", .(d)))) +
   labs(x="nr of persisting species, m", 
-       y="fraction of patches with m species, f(m)", 
+       y="fraction of patches with m species, fm", 
        col=expression(paste(bar(a))))
 
 ggsave(paste0("../figures/fm.pdf"), width=4.5, height = 3, 
@@ -100,17 +106,18 @@ NtotalK <- ggplot(IntPred |>
                               sdNTotalK = sd(NTotalK),
                               meanNTotalKPredicted = mean(NTotalKPredicted),
                               sdNTotalKPredicted = sd(NTotalKPredicted),
-                              .by = meanA)) + 
+                              .by = c(meanA, p))) + 
   theme_bw() +
   scale_color_viridis_c(option="plasma", end=0.9) +
-  aes(x=meanA, y=meanNTotalK) + 
+  aes(x=meanA, y=log10(meanNTotalK), group=as.factor(p)) + 
   geom_point() + 
-  geom_errorbar(aes(x=meanA, ymin=meanNTotalK-sdNTotalK, 
-                    ymax=meanNTotalK+sdNTotalK, 
+  geom_errorbar(aes(x=meanA, ymin=log10(meanNTotalK-sdNTotalK), 
+                    ymax=log10(meanNTotalK+sdNTotalK), 
                     width = 0.05)) + 
-  geom_line(aes(x=meanA, y=meanNTotalKPredicted)) +
+  geom_line(aes(x=meanA, y=log10(meanNTotalKPredicted), 
+                lty=as.factor(p)), show.legend = F) +
   labs(x="interaction strength, a", 
-       y=expression(paste("total density, ", Sigma[{k}],"N"[{"0,i"}]^{(k)}))) 
+       y=expression(paste("log"[10]," of total density, ", Sigma[{k}],"N"[{"0,i"}]^{(k)}))) 
 #labs(x=expression(paste(Sigma[{k}],"N"[{"0,i"}]^{(k)},~"simulated")), 
 #     y=expression(paste(Sigma[{k}],"N"[{"0,i"}]^{(k)},~"analytical"))) +
 #facet_grid(cols=vars(cvA), rows=vars(vary), labeller = label_both)
@@ -137,7 +144,7 @@ Predictions <- IntPred |>
   mutate(probExc = map_dbl(samples, ~sum(.x$NiExc>extinctionThreshold)/length(.x$NiExc)), #Compute probabilities that > threshold
          probPer = map_dbl(samples, ~sum(.x$NiPer>extinctionThreshold)/length(.x$NiPer))) |>
   mutate(summaryM = map2(summaryM, n, ~.x |>
-                             mutate(probN0iExt = fractionPatchesPredicted*(1-m/.y)))) |> #proba that Ni is absent from patches with m sp (w/o disp)
+                             mutate(probN0iExt = fmPredicted*(1-m/.y)))) |> #proba that Ni is absent from patches with m sp (w/o disp)
   mutate(probN0iExt = map_dbl(summaryM, ~sum(.x$probN0iExt)), #overall proba across all patches
          probN0iPer = 1-probN0iExt,
          prob = (probExc*probN0iExt + probPer*probN0iPer)^n) |> #grant prob
@@ -152,12 +159,13 @@ Predictions <- IntPred |>
 ## Illustrate predictions of NtotalK and negative IGR ----
 NegIGR <- Predictions |> 
   filter(d==min(d)) |>
-  select(all_of(c("meanA", "samples"))) |>
+  select(all_of(c("meanA", "samples", "p"))) |>
   unnest(samples) |>
   ggplot() +
   theme_bw() +
   scale_color_viridis_c(option="plasma", end=0.9) +
-  aes(x=NegIGR, col=meanA, group=meanA) + 
+  aes(x=NegIGR, col=meanA, lty=as.factor(p), 
+      group=interaction(meanA, as.factor(p))) + 
   geom_density(show.legend = F) + 
   labs(x="negative invasion growth rate", 
        y="probability density", col="a")
@@ -166,12 +174,13 @@ NegIGR <- Predictions |>
 probExc <- ggplot(Predictions) + 
   theme_bw() +
   scale_color_viridis_c(option="plasma", end=0.9) +
-  aes(x=log10(d), y=probExc, col=meanA, group=meanA) + 
+  aes(x=log10(d), y=probExc, col=meanA, lty=as.factor(p), 
+      group=interaction(meanA, as.factor(p))) + 
   geom_line() +
   #geom_point() +
   labs(x=expression(paste("log"[10],"(d)")), 
        y=expression(paste("P(N"[i],">0 | N"[i,0],"<0)")),
-       col="a")
+       col="a", lty="nr of patches")
 
 case1 <- grid.arrange(NtotalK, NegIGR, probExc, 
                              ncol=3, widths=c(1,1,1.4)) 
@@ -194,13 +203,38 @@ ggsave(paste0("../figures/case2.pdf"), probExc,
        width=3, height = 3, device = "pdf")  
 
 ## Summarize simulated data and add predictions and plot -----
-Sims %>% #selection of Sims
-  filter(dispType == "regularD", meanA<1) %>%
-  select(all_of(c("rep", "n", "meanA", "d", "propPatchesN", "vary", "cvA", "k"))) %>%
-  group_by(n, meanA, d, vary, cvA, k) %>%
+SimsSum <- Sims |> 
+  select(all_of(c("p", "rep", "n", "meanA", "d", 
+                  "propPatchesN", "vary", "cvA", "k", "dispType"))) %>%
+  group_by(n, meanA, d, vary, cvA, k, p, dispType) %>%
   summarise(meanProb = mean(propPatchesN, na.rm = T), 
-            sdProb = sd(propPatchesN, na.rm = T)) %>%
-  ggplot() + 
+            sdProb = sd(propPatchesN, na.rm = T))
+
+#Plot for when all assumptions are met
+ggplot(SimsSum |>
+         filter(dispType == "regularD", meanA<1, k==1, cvA==0, vary==0)) + 
+  scale_alpha_manual(values=c(0.3, 0.6, 1)) + 
+  theme_bw() +
+  scale_linetype_manual(values=rep("solid", 1000)) + 
+  scale_color_viridis_c(option="plasma", end=0.9) +
+  geom_point(aes(x=log10(d), y=meanProb, col=meanA), cex=2) +
+  geom_errorbar(aes(x=log10(d), ymin=meanProb-sdProb, 
+                    ymax=meanProb+sdProb, 
+                    col=meanA), width=0.1) +
+  geom_line(data=Predictions, 
+            aes(x=log10(d), y=prob2, group=interaction(meanA, as.factor(p)), col=meanA), 
+            show.legend = F) +
+  facet_grid(.~p, 
+             labeller = label_bquote(cols=paste(.(p)," patches"))) +
+  labs(x=expression(paste("log"[10],"(D)")), 
+       y="Patch occupancy", col="a", 
+       alpha="k")
+
+ggsave(paste0("../figures/feasIdeal.pdf"), width=6, height = 2, 
+       device = "pdf")  
+
+#Plot for when not met
+ggplot(SimsSum |> filter(dispType == "exponentialD", vary == 0)) + 
   scale_alpha_manual(values=c(1, 0.4)) + 
   theme_bw() +
   scale_linetype_manual(values=rep("solid", 1000)) + 
@@ -211,16 +245,15 @@ Sims %>% #selection of Sims
                     ymax=meanProb+sdProb, 
                     col=meanA, alpha=as.factor(k)), width=0.1) +
   geom_line(data=Predictions, 
-            aes(x=log10(d), y=prob2, col=meanA, lty=as_factor(meanA)), 
+            aes(x=log10(d), y=prob2, col=meanA, group=as_factor(meanA)), 
             show.legend = F) +
-  facet_grid(cols=vars(cvA), rows=vars(vary), 
-             labeller = label_bquote(cols=paste("cv(", a[ij],")=", .(cvA)),
-                          rows=paste("vary=", .(vary)))) +
-  labs(x=expression(paste("log"[10],"(d)")), 
+  facet_grid(cvA ~ p, labeller = label_bquote(rows=paste("cv(", a[ij],")=", .(cvA)),
+                                     cols=paste(.(p)," patches"))) +
+  labs(x=expression(paste("log"[10],"(D)")), 
        y="Patch occupancy", col=expression(paste(bar(a))), 
        alpha="k")
 
-ggsave(paste0("../figures/feasExponential.pdf"), width=5, height = 3, 
+ggsave(paste0("../figures/feasExponential.pdf"), width=6, height = 3, 
        device = "pdf")  
 
 ## Probability for extinction w/o disp. (theory and sims) --------

@@ -132,7 +132,7 @@ get_patch_occupancy <- function(fm, probExc, n, Xi, ...){
 # NegIGR (negative invasion growth rate of sp excluded w/o disp)
 # rhoi (ratio of local vs. mean regional abundance)
 sample_random <- function(summaryM, sampleSize, meanA, NTotalKPredicted, p, ...){
-  tibble(m = sample(x=summaryM$m, size=sampleSize, prob = summaryM$fractionPatchesPredicted, replace=T)) %>% #sample m according to f(m). Every sample is a hypothetical patch      
+  tibble(m = sample(x=summaryM$m, size=sampleSize, prob = summaryM$fmPredicted, replace=T)) %>% #sample m according to f(m). Every sample is a hypothetical patch      
     left_join(summaryM, by="m", multiple="all") %>% #get variables that match the sampled m
     select(all_of(c("m", "NTotalPredicted", "meanRPerPredicted", "meanRExcPredicted"))) %>%
     rowwise() %>%       
@@ -159,8 +159,31 @@ sample_random_Ni <- function(samples, d, meanA, n, p, ...){
  
 # Read the simulation results, 
 # and ditch the variables that take up lots of memory and won't be used
+# and summarize the density data
+# (This last step is a workaround until R gets an update on the cluster;
+# This summary is currently not done correctly bc of an older R version on the cluster)
 read_simulations <- function(file){
   readRDS(file) |>
-    select(!A & !D & !distances & !N0 & !coords)
+    select(!summaryM) |>
+    #1/ Summarize the simulated data: per m, compute the nr of patches and total biomass of an average patch
+    (\(x) mutate(x, summaryM = pmap(x, \(NHat, R, n,...) 
+                                    NHat |>
+                                      mutate(present = density>extinctionThreshold,
+                                             R=R) |>
+                                      summarize(m = as_factor(sum(present)),
+                                                NTotal = sum(density),
+                                                meanRPer = sum(R*present)/sum(present), 
+                                                .by = location) |>
+                                      mutate(m = fct_expand(m, as.character(c(1:n)))) |>
+                                      group_by(m, .drop=F) |>
+                                      summarize(nrPatches = n(),#nr of patches with m sp.
+                                                NTotal = mean(NTotal),#total biomass in a patch with m sp.
+                                                meanRPer = mean(meanRPer)))))()  |>#mean r of persisting sp.
+    #2/proportion of patches in which all n species persist
+    mutate(propPatchesN = 1/p*map2_dbl(summaryM, n, ~ (.x |> filter(m==.y))$nrPatches)) |>
+    #3/total density across all patches of a species
+    mutate(NTotalK = map(NHat, ~ .x |> 
+                           summarize(NTotalK = sum(density), .by = sp))) |>
+    select(!A & !D & !distances & !N0 & !coords) #ditch all unneeded data
 }
 
