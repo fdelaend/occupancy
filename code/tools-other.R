@@ -157,3 +157,10 @@ sample_random_Ni <- function(samples, d, meanA, n, p, ...){
            NiExc = d*N1iExc, #Ni when i is excluded w/o disp.
            NiPer = N0i+d*N1iPer)}
  
+# Read the simulation results, 
+# and ditch the variables that take up lots of memory and won't be used
+read_simulations <- function(file){
+  readRDS(file) |>
+    select(!A & !R & !D & !distances & !N0 & !coords)
+}
+

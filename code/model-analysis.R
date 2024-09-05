@@ -1,12 +1,19 @@
 
 source("tools-simulations.R")
 source("tools-other.R")
-#Sims <- readRDS("../data/data.rds")
+# Read simulation output and put them into a single object
+Sims <- tibble(filenr = c(1:100)) |>
+  mutate(data = map(filenr, ~read_simulations(paste("../simulated-data/",.x,"data.rds", sep="")))) |>
+  unnest(data) |>
+  select(!filenr) |>
+  mutate(rep = as.numeric(rep))
+# Save the object
+saveRDS(Sims, file=paste("../simulated-data/all-data.RDS",sep=""))
 
 ## Recover the distribution of the growth rates --------
 Rs     <- Sims |> 
-  #Only keep a single network, since the same Rs are being sampled everywhere
-  filter(d==min(d), meanA==0.2, vary==0, k==1, cvA==0, p==100, 
+  #Only keep a factorial combo, since the same Rs are being sampled everywhere
+  filter(meanA==0.2, d==min(d), vary==0, k==1, cvA==0, p==100, 
          rep==1) |> 
   select(R) |>
   unnest(R)
