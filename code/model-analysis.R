@@ -8,8 +8,8 @@ Sims <- tibble(filenr = c(1:100)) |>
   select(!filenr) |>
   mutate(rep = as.numeric(rep))
 # Save the object
-saveRDS(Sims, file=paste("../simulated-data/all-data.RDS",sep=""))
-
+#saveRDS(Sims, file=paste("../simulated-data/all-data.RDS",sep=""))
+Sims <- readRDS(file="../simulated-data/all-data.RDS")
 ## Recover the distribution of the growth rates --------
 Rs     <- Sims |> 
   #Only keep a factorial combo, since the same Rs are being sampled everywhere
@@ -178,7 +178,7 @@ probExc <- ggplot(Predictions) +
       group=interaction(meanA, as.factor(p))) + 
   geom_line() +
   #geom_point() +
-  labs(x=expression(paste("log"[10],"(d)")), 
+  labs(x=expression(paste("log"[10],"(D)")), 
        y=expression(paste("P(N"[i],">0 | N"[i,0],"<0)")),
        col="a", lty="nr of patches")
 
@@ -196,7 +196,7 @@ probExc <- ggplot(Predictions) +
   geom_line() +
   geom_point() +
   labs(x=expression(paste("log"[10],"(d)")), 
-       y=expression(paste("P(N"[i],">0 | N"[i,0],">0)")),
+       y=expression(paste("P(N"[i],">0 | N"[i0],">0)")),
        col="a")
 
 ggsave(paste0("../figures/case2.pdf"), probExc, 

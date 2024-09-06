@@ -91,15 +91,21 @@ test<-counts |>
 
 #plot of fraction vs. nr of patches p or desiccation
 test |>
+  #filter(!p<60) |>
   ggplot() +
   scale_color_viridis_d(option="plasma", end=0.9) +
-  aes(x=p, y=fraction, col=as.factor(year)) + 
+  aes(x=desiccation, y=fraction, col=as.factor(year)) + 
   geom_point(show.legend = F) + 
   facet_grid(richness~sample, scales = "free", labeller = label_both) +
-  geom_smooth(lwd=0.5, method = lm, se=F, show.legend = F)
+  geom_smooth(lwd=0.5, method = lm, formula = y ~ poly(x, 2), se=F, show.legend = F)
 
 # ggsave("../figures/desiccation.pdf", width=6, height=4)
 # ggsave("../figures/p.pdf", width=6, height=4)
+# ggsave("../figures/desiccation-poly.pdf", width=6, height=4)
+
+ggplot(test) + 
+  aes(x=p, y=desiccation) + 
+  geom_point()
 
 # Hard to see so check out the slopes of fraction vs. predictor (p or desiccation)
 slopes <- test %>%
