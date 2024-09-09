@@ -195,8 +195,8 @@ probExc <- ggplot(Predictions) +
   aes(x=log10(d), y=probPer, col=meanA, group=meanA) + 
   geom_line() +
   geom_point() +
-  labs(x=expression(paste("log"[10],"(d)")), 
-       y=expression(paste("P(N"[i],">0 | N"[i0],">0)")),
+  labs(x=expression(paste("log"[10],"(D)")), 
+       y=expression(paste("P(N"[i],">0 | N"[0i],">0)")),
        col="a")
 
 ggsave(paste0("../figures/case2.pdf"), probExc, 
