@@ -26,7 +26,8 @@ IntPred <- Sims |> #Start with simulations to obtain the predictor values (to ma
   # Select Simulations w/o dispersal (select regularD although the same for both dispersal types),  
   # stable matrices, diffuse competition, and 
   # regional equivalence, and make predictions
-  filter(meanA<1, d==min(d), vary==0, k==1, cvA==0, 
+  mutate(meanA = if_else(meanA==1, meanA+1e-5, meanA)) |> #Avoid matrices with det()=0
+  filter(d==min(d), vary==0, k==1, cvA==0, 
          dispType=="regularD") |>
   # *Measure* total density across all patches, mean across species (NTotalK)
   mutate(NTotalK = map_dbl(NTotalK, ~mean(.x$NTotalK))) |> #mean regional density across sp
@@ -41,6 +42,8 @@ IntPred <- Sims |> #Start with simulations to obtain the predictor values (to ma
                                     rowwise() |>
                                     mutate(fmPredicted = get_fraction_m(meanA=meanA, m=m, n=n)) |> #predicted total density in a patch of m persisting sp
                                     ungroup() |>
+                                    # get_fraction_m returns NA when m=1, so infer fm as 1-sum of probs for other m, but take abs because of small negative values originating when f(m=0) is almost 0
+                                    mutate(fmPredicted = if_else(m==1, abs(1-sum(fmPredicted, na.rm=T)), fmPredicted)) |>
                                     mutate(meanRPerPredicted = get_RMeanM(a=meanA, m=m, n=n, r=meanR),#predicted mean r of persisting sp
                                            meanRExcPredicted = (-meanRPerPredicted*m+n*meanR)/(n-m),#predicted mean r of excluded sp
                                            NTotalPredicted = get_N_total(meanA=meanA, n=m, r=meanRPerPredicted)))))() |> #predicted total density for a patch with m species
@@ -167,7 +170,7 @@ NegIGR <- Predictions |>
   aes(x=NegIGR, col=meanA, lty=as.factor(p), 
       group=interaction(meanA, as.factor(p))) + 
   geom_density(show.legend = F) + 
-  labs(x="negative invasion growth rate", 
+  labs(x="exclusion rate", 
        y="probability density", col="a")
 
 ## Plot predictions of prob, conditional on i persisting/excluded w/o disp. ----
@@ -179,7 +182,7 @@ probExc <- ggplot(Predictions) +
   geom_line() +
   #geom_point() +
   labs(x=expression(paste("log"[10],"(D)")), 
-       y=expression(paste("P(N"[i],">0 | N"[i,0],"<0)")),
+       y=expression(paste("P(N"[i],">0 | N"[i,0],"=0)")),
        col="a", lty="nr of patches")
 
 case1 <- grid.arrange(NtotalK, NegIGR, probExc, 

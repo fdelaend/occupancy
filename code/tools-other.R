@@ -50,7 +50,7 @@ get_fraction_m <- function(meanA=0.5, m=2, n=3, ...){
   #diag(Am2)<- 1
   B        <- diag(c(rep(1, n))) #constraints
   feas1combo <- 2^(n)*calculate_omega_constraint(A=Am, B=B)^(n)
-  choose(n, m) * feas1combo
+  ifelse(m==1, NA, choose(n, m) * feas1combo)
 }
 
 #make a distribution of nr of species in a patch in
