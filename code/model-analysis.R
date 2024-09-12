@@ -105,6 +105,7 @@ ggsave(paste0("../figures/fm.pdf"), width=4.5, height = 3,
 
 ## Plot predicted vs. simulated NtotalK ----
 NtotalK <- ggplot(IntPred |>
+                    filter(meanA<1) |>
                     summarise(meanNTotalK = mean(NTotalK),
                               sdNTotalK = sd(NTotalK),
                               meanNTotalKPredicted = mean(NTotalKPredicted),
@@ -131,7 +132,7 @@ ggsave(paste0("../figures/Nk.pdf"), width=4, height = 3,
 # PREDICTIONS OF PATCH OCCUPANCY -----
 ## Make the predictions for when all assumptions are met
 Predictions <- IntPred |>
-  filter(rep==1) |> #Select 1st replicate
+  filter(rep==1, meanA<1) |> #Select 1st replicate
   select(-c("rep", "k", "cvA", "vary", "d")) |> #Remove irrelevant variables
   mutate(sampleSize = 1000) |> #set sample size for probability calculations
   (\(x) mutate(x, samples = pmap(x, sample_random)))() |>
@@ -182,7 +183,7 @@ probExc <- ggplot(Predictions) +
   geom_line() +
   #geom_point() +
   labs(x=expression(paste("log"[10],"(D)")), 
-       y=expression(paste("P(N"[i],">0 | N"[i,0],"=0)")),
+       y=expression(paste("P(N"[i],">0 | N"[i0],"=0)")),
        col="a", lty="nr of patches")
 
 case1 <- grid.arrange(NtotalK, NegIGR, probExc, 
