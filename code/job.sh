@@ -2,10 +2,10 @@
 
 #SBATCH --job-name=Occupancy
 #SBATCH --array=1-100
-#SBATCH --time=02:00:00 # hh:mm:ss
+#SBATCH --time=03:00:00 # hh:mm:ss
 #
 #SBATCH --ntasks=1 
-#SBATCH --mem-per-cpu=10G # megabytes 
+#SBATCH --mem-per-cpu=20G # megabytes 
 #SBATCH --partition=batch
 #
 #SBATCH --mail-user=frederik.delaender@unamur.be
@@ -15,6 +15,6 @@
 
 ml purge
 
-ml R
+ml ml R/4.3.2-gfbf-2023a
 
 Rscript model-simulations.R $SLURM_ARRAY_TASK_ID
