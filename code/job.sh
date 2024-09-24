@@ -14,7 +14,6 @@
 #SBATCH --comment=Occupancy
 
 ml purge
-ml releases/2023a
-ml R/4.3.2-gfbf-2023a
+ml R
 
 Rscript model-simulations.R $SLURM_ARRAY_TASK_ID
