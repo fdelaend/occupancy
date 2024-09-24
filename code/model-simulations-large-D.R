@@ -1,7 +1,7 @@
 
 # Illustration of what happens when dispersal is large
 
-Sims <- expand_grid(n = c(6), meanA = c(0.8), #, 6; 0.4, 0.4, 0.6, 
+Sims <- expand_grid(n = c(6), meanA = c(0.6), #, 6; 0.4, 0.4, 0.6, 
                     d = seq(-3,0, length.out=5), vary=0, k=c(1, 1.5),
                     cvA = 0.2, p = c(10, 20, 30, 40, 50), rep = 1) |> #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
   #Make parameters: d, sdA
