@@ -91,23 +91,24 @@ test<-counts |>
 
 #plot of fraction vs. nr of patches p or desiccation
 test |>
-  mutate(desiccation_cat = if_else(desiccation<1, "low", "high")) |>
-  filter(desiccation_cat == "low",
-         p>75) |>
+  filter(sample == 1) |>
   ggplot() +
   scale_color_viridis_d(option="plasma", end=0.9) +
-  aes(x=p, y=fraction, col=as.factor(year)) + 
-  geom_point(show.legend = F) + 
-  facet_grid(richness~sample, scales = "free", labeller = label_both) +
-  geom_smooth(lwd=0.5, method = lm, se=F, show.legend = F)
-
-# ggsave("../figures/desiccation.pdf", width=6, height=4)
-# ggsave("../figures/p.pdf", width=6, height=4)
-# ggsave("../figures/desiccation-poly.pdf", width=6, height=4)
+  aes(x=desiccation, y=fraction, 
+      col=as.factor(richness),
+      group=interaction(as.factor(richness), as.factor(year))) + 
+  geom_point() +
+  #facet_grid(.~sample, scales = "free", labeller = label_both) +
+  geom_smooth(lwd=0.5, method = lm, se=F, show.legend = F) + 
+  labs(y = "fraction", col="richness")
 
 ggplot(test) + 
   aes(x=p, y=desiccation) + 
   geom_point()
+
+# ggsave("../figures/desiccation.pdf", width=4, height=3)
+# ggsave("../figures/p.pdf", width=6, height=4)
+# ggsave("../figures/desiccation-poly.pdf", width=6, height=4)
 
 # Hard to see so check out the slopes of fraction vs. predictor (p or desiccation)
 slopes <- test %>%
