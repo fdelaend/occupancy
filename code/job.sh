@@ -15,6 +15,6 @@
 
 ml purge
 
-ml ml R/4.3.2-gfbf-2023a
+ml R/4.3.2-gfbf-2023a
 
 Rscript model-simulations.R $SLURM_ARRAY_TASK_ID
