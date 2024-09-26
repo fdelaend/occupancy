@@ -84,7 +84,7 @@ get_mean_trunc <- function(pdfFitted, q=0.5, ditch="up"){
 
 #mean R of the persisting sp
 #x = factor to divide a*Nt by in order to get the mean
-get_RMeanM <- function(a=0.8, m=1, n=4, r=1.01, x=2.2){
+get_RMeanM <- function(a=0.8, m=1, n=4, r=1.01, x=2){
   ((1 + a*(-1 + m))*n*r*x)/(m*(a*(n + m*(-1 + x) - x) + x)) 
 } 
 
@@ -131,9 +131,9 @@ get_patch_occupancy <- function(fm, probExc, n, Xi, ...){
 # N1iExc (contribution of a unit dispersal to density of a sp excluded w/o disp)
 # NegIGR (negative invasion growth rate of sp excluded w/o disp)
 # rhoi (ratio of local vs. mean regional abundance)
-sample_random <- function(summaryM, sampleSize, meanA, NTotalKPredicted, p, ...){
-  tibble(m = sample(x=summaryM$m, size=sampleSize, prob = summaryM$fmPredicted, replace=T)) %>% #sample m according to f(m). Every sample is a hypothetical patch      
-    left_join(summaryM, by="m", multiple="all") %>% #get variables that match the sampled m
+sample_random <- function(data, sampleSize, meanA, NTotalKPredicted, p, ...){
+  tibble(m = sample(x=data$m, size=sampleSize, prob = data$fmPredicted, replace=T)) %>% #sample m according to f(m). Every sample is a hypothetical patch      
+    left_join(data, by="m", multiple="all") %>% #get variables that match the sampled m
     select(all_of(c("m", "NTotalPredicted", "meanRPerPredicted", "meanRExcPredicted"))) %>%
     rowwise() %>%       
     #sample 1 growth rate per hypo patch, from distribution of R such that IGR<0 (for riExc) or >0 (for riPer) 
@@ -163,7 +163,7 @@ sample_random_Ni <- function(samples, d, meanA, n, p, ...){
 # (This last step is a workaround until R gets an update on the cluster;
 # This summary is currently not done correctly bc of an older R version on the cluster)
 read_simulations <- function(file){
-  readRDS(file) |>
+  read_rds(file) #|>
     select(!summaryM) |>
     #1/ Summarize the simulated data: per m, compute the nr of patches and total biomass of an average patch
     (\(x) mutate(x, summaryM = pmap(x, \(NHat, R, n,...) 

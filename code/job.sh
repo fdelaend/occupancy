@@ -2,7 +2,7 @@
 
 #SBATCH --job-name=Occupancy
 #SBATCH --array=1-100
-#SBATCH --time=10:00:00 # hh:mm:ss
+#SBATCH --time=20:00:00 # hh:mm:ss
 #
 #SBATCH --ntasks=1 
 #SBATCH --mem-per-cpu=20G # megabytes 
