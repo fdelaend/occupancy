@@ -2,7 +2,7 @@
 source("tools-simulations.R")
 source("tools-other.R")
 # Read simulation output and put them into a single object
-Sims <- tibble(filenr = c(1, 2, 5:100)) |>
+Sims <- tibble(filenr = c(1:100)) |>
   mutate(data = map(filenr, ~read_rds(paste("../simulated-data/",.x,"data.rds", sep="")))) |>
   unnest(data) |>
   select(!filenr) |>
@@ -22,7 +22,8 @@ meanR  <- sum(pdfRs$x*pdfRs$y)/sum(pdfRs$y)#grant mean of R
 
 # PLOTS TO GET INTUITION -----
 Sims |> 
-  filter(vary==0, cvA==0.2, p==20, k==1.5, meanA %in% c(0.2, 0.8),
+  filter(meanA %in% c(0.2, 0.8), vary == 0, log10(d) < -4,
+         k == 1, cvA == 0.2, p == 40, 
          dispType == "regularD") |>
   select(!R & !NHat & !NTotalK) |>
   unnest(summaryM) |>
@@ -45,64 +46,41 @@ Sims |>
              labeller = label_bquote(cols=paste(bar(a),"=", .(meanA)))) +
   labs(y = "fraction", col = "local richness", x = "log10 of dispersal rate")
 
-# INTERMEDIATE PREDICTIONS: ----
-## Make the predictions of fm and NTotalK -----
-### Make first predictions of fm vs. m, n, meanA
-fms <- expand_grid(n = 6, m = c(2:6), iteration = c(1:100),
-                   meanA = unique(Sims$meanA)) |>
+# PREDICTIONS for diffuse competition ----
+## Predictions of fm and NTot-----
+Predictions_fm <- expand_grid(n = 6, m = c(1:6), iteration = c(1:10),
+                   meanA = seq(0, 0.8, 0.1)) |>
   mutate(meanA = if_else(meanA==1, meanA+1e-5, meanA)) |> #Avoid matrices with det()=0
   (\(x) mutate(x, fmPredicted = pmap_dbl(x, get_fraction_m)))() |>
+  #fm isn't calculated correctly for m = 1, so get it here as 1 - sum of fm for 2 to 6
+  mutate(fmPredicted = if_else(m==1, abs(1-sum(fmPredicted, na.rm=T)), fmPredicted),
+         .by = c(n, meanA, iteration))  |>
   summarise(fmPredicted = mean(fmPredicted), 
             .by = c(n, m, meanA))
-  
-IntPred <- Sims |> #Start with simulations to obtain the predictor values (to make sure we're predicting for exactly the same parameter values) 
-  # Select Simulations w/o dispersal (select regularD although the same for both dispersal types),  
-  # stable matrices, diffuse competition, and 
-  # regional equivalence, and make predictions
-  mutate(meanA = if_else(meanA==1, meanA+1e-5, meanA)) |> #Avoid matrices with det()=0
-  filter(d==min(d), vary==0, k==1, cvA==0, 
-         dispType=="regularD") |>
-  # *Measure* total density across all patches, mean across species (NTotalK)
-  mutate(NTotalK = map_dbl(NTotalK, ~mean(.x$NTotalK))) |> #mean regional density across sp
-  # *Predict*, for each level of local richness m: 
-  # -fm: expected fraction of patches with richness=m (fmPredicted),
+
+saveRDS(Predictions_fm, file=paste("../simulated-data/Predictions_fm.RDS",sep=""))
+
+## Predictions of NTotalK ---
+Predictions_NK <- Predictions_fm |> 
+  # Predict, for each level of local richness m: 
   # -mean r of persisting sp (meanRPerPredicted)
   # -mean r of excluded sp (meanRExcPredicted) 
   # -total density across all patches, mean across species (NTotalPredicted)
-  select(-NHat) |>
-  unnest(summaryM) |>
-  mutate(m=as.numeric(as.character(m))) |>
-  left_join(fms, join_by(meanA, m, n)) |> 
-  mutate(fmPredicted = if_else(m==1, abs(1-sum(fmPredicted, na.rm=T)), fmPredicted),
-         .by = c(n, meanA, d, vary, k, cvA, p, rep)) |>
   mutate(meanRPerPredicted = get_RMeanM(a=meanA, m=m, n=n, r=meanR),#predicted mean r of persisting sp
          meanRExcPredicted = (-meanRPerPredicted*m+n*meanR)/(n-m),#predicted mean r of excluded sp
          NTotalPredicted = get_N_total(meanA=meanA, n=m, r=meanRPerPredicted)) |>
   # Predict total regional density (same for all species)
+  expand_grid(p = seq(10, 100, 10)) |>
   mutate(NperM = p/n*fmPredicted * NTotalPredicted) |>
   mutate(NTotalKPredicted = sum(NperM), 
-         .by = c(n, meanA, d, vary, k, cvA, p, rep)) 
+         .by = c(n, meanA, p)) 
 
-## Unnest and only keep those variables that are for now relevant ---
-SelIntPred <- IntPred |>
-  select(all_of(c("n", "meanA", "d", "vary", "k", "cvA", "dispType",
-                  "p", "rep", "m", "fmPredicted")))
-
-## Plot predicted vs. simulated NtotalK ----
-NtotalK <- ggplot(IntPred |>
+NtotalK <- ggplot(Predictions_NK |>
                     filter(meanA<1) |>
-                    summarise(meanNTotalK = mean(NTotalK),
-                              sdNTotalK = sd(NTotalK),
-                              meanNTotalKPredicted = mean(NTotalKPredicted),
-                              sdNTotalKPredicted = sd(NTotalKPredicted),
+                    summarise(meanNTotalKPredicted = mean(NTotalKPredicted),
                               .by = c(meanA, p))) + 
   theme_bw() +
   scale_color_viridis_c(option="plasma", end=0.9) +
-  aes(x=meanA, y=log10(meanNTotalK), group=as.factor(p)) + 
-  geom_point() + 
-  geom_errorbar(aes(x=meanA, ymin=log10(meanNTotalK-sdNTotalK), 
-                    ymax=log10(meanNTotalK+sdNTotalK), 
-                    width = 0.05)) + 
   geom_line(aes(x=meanA, y=log10(meanNTotalKPredicted), 
                 lty=as.factor(p)), show.legend = F) +
   labs(x="interaction strength, a", 
@@ -116,7 +94,7 @@ ggsave(paste0("../figures/Nk.pdf"), width=4, height = 3,
 
 # PREDICTIONS OF PATCH OCCUPANCY -----
 ## Make the predictions for when all assumptions are met
-Predictions <- IntPred |>
+Predictions <- Predictions_NK |>
   select(!R) |>
   nest_by(n, meanA, d, vary, k, cvA, p, rep, sdA, 
           dispType, NTotalKPredicted) |>
