@@ -30,11 +30,11 @@ get_N1iExc <- function(NTotalK=10, ri=1, a=0.5, SumN0j){
 #get N1i when i persists w/o dispersal
 #a = interaction strength
 #n and m: nr of species in the regional pool and in the focal patch
-#meanN1iExc = mean of N1iExc across species
-#rho = mean of rhoi across species
+#meanN1Exc = mean of N1iExc across species
+#meanrho = mean of rhoi across species
 #rhoi = rho for species i, given that it persists w/o dispersal
-get_N1iPer <- function(a=0.5, n=4, m=1, rho, rhoi, p, meanN1iExc){
-  (a*((1-a)*meanN1iExc*(n-m)+(m-1)*rho+(2-m)*rhoi) + (p-1)*(1-a) - rhoi)/
+get_N1iPer <- function(a=0.5, n=4, m=1, meanrho, rhoi, p, meanN1Exc){
+  (a*((1-a)*meanN1Exc*(n-m)+(m-1)*meanrho+(2-m)*rhoi) + (p-1)*(1-a) - rhoi)/
     ((1-a)*(a*(m-1)+1))
 }
 
@@ -107,19 +107,18 @@ sample_ri <- function(samplesize=1, PDF, cutoff, ditch="below", ...){
 # -probExc: probability for a species to persist if it does not persist without dispersal
 # -n: total number (i.e. number of regionally available) species
 # -Xi: feasibility for n species
-get_patch_occupancy <- function(fm, probExc, n, Xi, ...){
-  fm |>
+get_patch_occupancy <- function(data, probExc, n, Xi, ...){
+  data |>
     filter(m<n) |>
-    mutate(term = fm*probExc^(n-m)) |>
+    mutate(term = fmPredicted*probExc^(n-m)) |>
     summarize(sum(term)) |>
     (\(x) x*(1-Xi) + Xi)() |>
-    #(\(x) x + Xi)() |>
     as_vector()
 }
 
 #Sample the random variables needed to predict patch occupancy
 #Input:
-# -summaryM: a tibble with the number of species in a patch (m),
+# -data: a tibble with the number of species in a patch (m),
 # the total biomass (NTotal), given m, 
 # the mean growth rate of the persisting species (meanRPer),
 # the predicted fraction of patches in which m species persist
@@ -152,8 +151,8 @@ sample_random <- function(data, sampleSize, meanA, NTotalKPredicted, p, ...){
 # - n (nr of sp), p (nr of patches)
 sample_random_Ni <- function(samples, d, meanA, n, p, ...){ 
   samples |>
-    mutate(N1iPer = get_N1iPer(a=meanA, n=n, m=m, rho=rho, #N1i when i persists w/o disp.
-                               rhoi=rhoi, meanN1iExc=meanN1iExc, p=p), 
+    mutate(N1iPer = get_N1iPer(a=meanA, n=n, m=m, meanrho=meanrho, #N1i when i persists w/o disp.
+                               rhoi=rhoi, meanN1Exc=meanN1Exc, p=p), 
            NiExc = d*N1iExc, #Ni when i is excluded w/o disp.
            NiPer = N0i+d*N1iPer)}
  

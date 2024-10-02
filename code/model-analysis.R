@@ -46,10 +46,10 @@ Sims |>
              labeller = label_bquote(cols=paste(bar(a),"=", .(meanA)))) +
   labs(y = "fraction", col = "local richness", x = "log10 of dispersal rate")
 
-# PREDICTIONS for diffuse competition ----
-## Predictions of fm and NTot-----
+# PREDICTIONS of fm and NTotalK, for diffuse competition ----
+## Predictions of fm -----
 Predictions_fm <- expand_grid(n = 6, m = c(1:6), iteration = c(1:10),
-                   meanA = seq(0, 0.8, 0.1)) |>
+                   meanA = seq(0, 0.8, 0.05)) |>
   mutate(meanA = if_else(meanA==1, meanA+1e-5, meanA)) |> #Avoid matrices with det()=0
   (\(x) mutate(x, fmPredicted = pmap_dbl(x, get_fraction_m)))() |>
   #fm isn't calculated correctly for m = 1, so get it here as 1 - sum of fm for 2 to 6
@@ -58,9 +58,10 @@ Predictions_fm <- expand_grid(n = 6, m = c(1:6), iteration = c(1:10),
   summarise(fmPredicted = mean(fmPredicted), 
             .by = c(n, m, meanA))
 
-saveRDS(Predictions_fm, file=paste("../simulated-data/Predictions_fm.RDS",sep=""))
-
-## Predictions of NTotalK ---
+#saveRDS(Predictions_fm, file=paste("../simulated-data/Predictions_fm.RDS",sep=""))
+Predictions_fm <- readRDS(file="../simulated-data/Predictions_fm.RDS")
+  
+## Predictions of NTotalK ----
 Predictions_NK <- Predictions_fm |> 
   # Predict, for each level of local richness m: 
   # -mean r of persisting sp (meanRPerPredicted)
@@ -70,7 +71,7 @@ Predictions_NK <- Predictions_fm |>
          meanRExcPredicted = (-meanRPerPredicted*m+n*meanR)/(n-m),#predicted mean r of excluded sp
          NTotalPredicted = get_N_total(meanA=meanA, n=m, r=meanRPerPredicted)) |>
   # Predict total regional density (same for all species)
-  expand_grid(p = seq(10, 100, 10)) |>
+  expand_grid(p = seq(10, 100, 1)) |>
   mutate(NperM = p/n*fmPredicted * NTotalPredicted) |>
   mutate(NTotalKPredicted = sum(NperM), 
          .by = c(n, meanA, p)) 
@@ -80,52 +81,43 @@ NtotalK <- ggplot(Predictions_NK |>
                     summarise(meanNTotalKPredicted = mean(NTotalKPredicted),
                               .by = c(meanA, p))) + 
   theme_bw() +
-  scale_color_viridis_c(option="plasma", end=0.9) +
-  geom_line(aes(x=meanA, y=log10(meanNTotalKPredicted), 
-                lty=as.factor(p)), show.legend = F) +
+  theme(panel.grid = element_blank()) +
+  scale_fill_viridis_c(option="plasma", end=0.9) +
+  geom_tile(aes(x=meanA, fill=log10(meanNTotalKPredicted), 
+                y=p)) +
   labs(x="interaction strength, a", 
-       y=expression(paste("log"[10]," of total density, ", Sigma[{k}],"N"[{"0,i"}]^{(k)}))) 
+       fill=expression(paste("log"[10],"(", Sigma[{k}],"N"[{"0,i"}]^{(k)}, ")"))) +
+  theme(legend.position="bottom")
 #labs(x=expression(paste(Sigma[{k}],"N"[{"0,i"}]^{(k)},~"simulated")), 
 #     y=expression(paste(Sigma[{k}],"N"[{"0,i"}]^{(k)},~"analytical"))) +
 #facet_grid(cols=vars(cvA), rows=vars(vary), labeller = label_both)
 
-ggsave(paste0("../figures/Nk.pdf"), width=4, height = 3, 
+ggsave(paste0("../figures/Nk.pdf"), width=3, height = 3, 
        device = "pdf")
 
 # PREDICTIONS OF PATCH OCCUPANCY -----
 ## Make the predictions for when all assumptions are met
 Predictions <- Predictions_NK |>
-  select(!R) |>
-  nest_by(n, meanA, d, vary, k, cvA, p, rep, sdA, 
-          dispType, NTotalKPredicted) |>
+  filter(meanA > 0) |> #Otherwise error when computing sample_ri
+  nest_by(n, meanA, p, NTotalKPredicted) |>
   ungroup() |>
-  filter(rep==1, meanA<1) |> #Select 1st replicate
-  select(!rep & !k & !cvA & !vary & !d) |> #Remove irrelevant variables
   mutate(sampleSize = 1000) |> #set sample size for probability calculations
   (\(x) mutate(x, samples = pmap(x, sample_random)))() |>
-  mutate(means = map(samples, ~ .x |>  
-                       summarize(meanN1iExc=mean(N1iExc, na.rm=T), #mean across patches of Ni1 in case of exclusion w/o dispersal. Because we sample 1 species per patch, this is the same as taking a mean across species
-                                 rho = mean(rhoi, na.rm=T),
-                                 .by = m))) |> #same type of mean, but now of rhoi 
-  mutate(samples = map2(samples, means, ~.x |> #add means to samples
-                          left_join(.y, by = join_by(m)))) |>
-  expand_grid(d = seq(-6,-0, length.out=100)) |> #Create a gradient of dispersal values
+  mutate(samples = map(samples, ~ .x |>  
+                       mutate(meanN1Exc=mean(N1iExc, na.rm=T), #mean across patches of Ni1 in case of exclusion w/o dispersal. Because we sample 1 species per patch, this is the same as taking a mean across species
+                              meanrho = mean(rhoi, na.rm=T), #same type of mean, but now of rhoi
+                              .by = m))) |>  
+  expand_grid(d = seq(-6,-0, length.out=10)) |> #Create a gradient of dispersal values
   mutate(d=10^d) |>
-  (\(x) mutate(x, samples = pmap(x, sample_random_Ni)))() |>
+  (\(x) mutate(x, samples = pmap(x, sample_random_Ni)))() |> #Sample random values for Ni (density of i with dispersal)
   mutate(probExc = map_dbl(samples, ~sum(.x$NiExc>extinctionThreshold)/length(.x$NiExc)), #Compute probabilities that > threshold
          probPer = map_dbl(samples, ~sum(.x$NiPer>extinctionThreshold)/length(.x$NiPer))) |>
-  mutate(data = map2(data, n, ~.x |>
-                             mutate(probN0iExt = fmPredicted*(1-m/.y)))) |> #proba that Ni is absent from patches with m sp (w/o disp)
-  mutate(probN0iExt = map_dbl(data, ~sum(.x$probN0iExt)), #overall proba across all patches
-         probN0iPer = 1-probN0iExt,
-         prob = (probExc*probN0iExt + probPer*probN0iPer)^n) |> #grant prob
-  mutate(fm = map(data, ~ .x |> select(all_of(c("m", "nrPatches"))) |>
-                    mutate(fm = nrPatches/sum(nrPatches)) |>
-                    select(all_of(c("m", "fm"))))) |>
   (\(x) mutate(x, A = pmap(x, make_A)))() |>
   mutate(Xi = map_dbl(A, ~feasibility(.x))) |>
   (\(x) mutate(x, prob2 = pmap_dbl(x, get_patch_occupancy)))() |>
-  select(-data)
+  select(!data & !A)
+
+saveRDS(Predictions, file=paste("../simulated-data/Predictions.RDS",sep=""))
 
 ## Illustrate predictions of NtotalK and negative IGR ----
 NegIGR <- Predictions |> 
@@ -134,131 +126,97 @@ NegIGR <- Predictions |>
   unnest(samples) |>
   ggplot() +
   theme_bw() +
+  theme(panel.grid = element_blank()) +
   scale_color_viridis_c(option="plasma", end=0.9) +
-  aes(x=NegIGR, col=meanA, lty=as.factor(p), 
-      group=interaction(meanA, as.factor(p))) + 
-  geom_density(show.legend = F) + 
+  aes(x=NegIGR, col=meanA, group = meanA) + 
+  geom_density() + 
   labs(x="exclusion rate", 
-       y="probability density", col="a")
+       y="probability density", col="a") +
+  theme(legend.position="bottom")
 
-## Plot predictions of prob, conditional on i persisting/excluded w/o disp. ----
-probExc <- ggplot(Predictions) + 
+## Plot predictions of prob, conditional on i excluded w/o disp. ----
+probExc <- ggplot(Predictions |> 
+                    filter(meanA %in% c(0.1, 0.8), log10(d) < -4)) + 
   theme_bw() +
-  scale_color_viridis_c(option="plasma", end=0.9) +
-  aes(x=log10(d), y=probExc, col=meanA, lty=as.factor(p), 
-      group=interaction(meanA, as.factor(p))) + 
-  geom_line() +
+  theme(panel.grid = element_blank()) +
+  scale_fill_viridis_c(option="plasma", end=0.9) +
+  aes(x=log10(d), y=p, fill=probExc) + 
+  geom_tile() +
   #geom_point() +
   labs(x=expression(paste("log"[10],"(D)")), 
-       y=expression(paste("P(N"[i],">0 | N"[i0],"=0)")),
-       col="a", lty="nr of patches")
+       fill=expression(paste("P(N"[i],">0 | N"[i0],"=0)")),
+       y="nr of patches") + 
+  facet_grid(.~meanA, 
+             labeller = label_bquote(cols=paste("a = ",.(meanA)))) +
+  theme(legend.position="bottom")
 
 case1 <- grid.arrange(NtotalK, NegIGR, probExc, 
-                             ncol=3, widths=c(1,1,1.4)) 
+                      layout_matrix = rbind(c(1, 2), c(3, 3)), 
+                      widths=c(1,1)) 
 
 ggsave(paste0("../figures/case1.pdf"), case1, 
-       width=8, height = 3, device = "pdf")  
+       width=5, height = 7.5, device = "pdf")  
 
 ## Plot Case 2
-probExc <- ggplot(Predictions) + 
+probExc <- ggplot(Predictions |> 
+                    filter(meanA %in% c(0.1, 0.8), log10(d) < -4)) + 
   theme_bw() +
-  scale_color_viridis_c(option="plasma", end=0.9) +
-  aes(x=log10(d), y=probPer, col=meanA, group=meanA) + 
-  geom_line() +
-  geom_point() +
+  theme(panel.grid = element_blank()) +
+  scale_fill_viridis_c(option="plasma", end=0.9) +
+  aes(x=log10(d), y=p, fill=probPer) + 
+  geom_tile() +
   labs(x=expression(paste("log"[10],"(D)")), 
-       y=expression(paste("P(N"[i],">0 | N"[0i],">0)")),
-       col="a")
+       y="nr of patches", 
+       fill=expression(paste("P(N"[i],">0 | N"[0i],">0)")),
+       col="a") +
+  facet_grid(.~meanA, 
+             labeller = label_bquote(cols=paste("a = ",.(meanA)))) +
+  theme(legend.position="bottom")
 
 ggsave(paste0("../figures/case2.pdf"), probExc, 
        width=3, height = 3, device = "pdf")  
 
-## Summarize simulated data and add predictions and plot -----
+## Summarize simulated data to add to predictions -----
 SimsSum <- Sims |> 
-  select(all_of(c("p", "rep", "n", "meanA", "d", 
-                  "propPatchesN", "vary", "cvA", "k", "dispType"))) |>
+  select(all_of(c("n", "meanA", "d", "vary", "k", 
+                  "cvA", "p", "dispType", "propPatchesN"))) |>
   summarise(meanProb = mean(propPatchesN, na.rm = T), 
             sdProb = sd(propPatchesN, na.rm = T), 
-            .by = c(n, meanA, d, vary, cvA, k, p, dispType))
+            .by = c(n, meanA, d, vary, k, cvA, p, dispType)) |>
+  mutate(k = if_else(k==1, "Regional equivalence", "Regional dominance"))
 
-#Plot for when all assumptions are met
+#Plot for when all assumptions are met, but allowing d to be large
 ggplot(SimsSum |>
-         filter(dispType == "regularD", log10(d) < -3.9,
-                meanA<1, k==1, cvA==0, vary==0)) + 
-  scale_alpha_manual(values=c(0.3, 0.6, 1)) + 
+         filter(dispType == "regularD", 
+                meanA<1, k=="Regional equivalence", cvA==0, vary==0)) + 
   theme_bw() +
-  scale_linetype_manual(values=rep("solid", 1000)) + 
-  scale_color_viridis_c(option="plasma", end=0.9) +
-  geom_point(aes(x=log10(d), y=meanProb, col=meanA), cex=2) +
-  #geom_errorbar(aes(x=log10(d), ymin=meanProb-sdProb, 
-  #                  ymax=meanProb+sdProb, 
-  #                  col=meanA), width=0.1) +
-  geom_line(data=Predictions |> filter(log10(d) < -3.9), 
-            aes(x=log10(d), y=prob2, group=interaction(meanA, as.factor(p)), col=meanA), 
-            show.legend = F) +
-  facet_grid(.~p, 
-             labeller = label_bquote(cols=paste(.(p)," patches"))) +
+  theme(panel.grid = element_blank()) +
+  scale_fill_viridis_c(option="plasma", end=0.9) +
+  geom_tile(data=Predictions |> filter(meanA %in% c(0.2, 0.4, 0.8)), 
+              aes(x=log10(d), y=p, fill = prob2), show.legend = F) +
+  geom_point(aes(x=log10(d), y=p, fill=meanProb), col = "white", 
+             pch = 21, cex=3) +
+  facet_grid(.~meanA, 
+             labeller = label_bquote(cols=paste("a = ", .(meanA)))) +
   labs(x=expression(paste("log"[10],"(D)")), 
-       y="Patch occupancy", col="a", 
-       alpha="k")
+       y="nr. of patches", fill="Patch occupancy")
 
 ggsave(paste0("../figures/feasIdeal.pdf"), width=6, height = 2, 
        device = "pdf")  
 
 #Plot for when not met
-ggplot(SimsSum |> filter(dispType == "exponentialD", vary == 0)) + 
-  scale_alpha_manual(values=c(1, 0.4)) + 
+ggplot(SimsSum |> filter(dispType == "exponentialD", 
+                         vary > 0, cvA == 0.2)) + 
   theme_bw() +
-  scale_linetype_manual(values=rep("solid", 1000)) + 
-  scale_color_viridis_c(option="plasma", end=0.9) +
-  geom_point(aes(x=log10(d), y=meanProb, col=meanA, 
-                 alpha=as.factor(k)), cex=2) +
-  #geom_errorbar(aes(x=log10(d), ymin=meanProb-sdProb, 
-  #                  ymax=meanProb+sdProb, 
-  #                  col=meanA, alpha=as.factor(k)), width=0.1) +
-  geom_line(data=Predictions, 
-            aes(x=log10(d), y=prob2, col=meanA, group=as_factor(meanA)), 
-            show.legend = F) +
-  facet_grid(cvA ~ p, labeller = label_bquote(rows=paste("cv(", a[ij],")=", .(cvA)),
-                                     cols=paste(.(p)," patches"))) +
-  labs(x=expression(paste("log"[10],"(D)")), 
-       y="Patch occupancy", col=expression(paste(bar(a))), 
-       alpha="k")
+  theme(panel.grid = element_blank()) +
+  scale_fill_viridis_c(option="plasma", end=0.9) +
+  geom_point(aes(x=log10(d), y=p, fill = meanProb), pch = 21, cex=5) +
+  facet_grid(k~meanA, 
+             labeller = label_bquote(cols = paste(bar(a), " = ", .(meanA)))) +
+  labs(x = expression(paste("log"[10],"(D)")), 
+       y = "nr of patches, p", fill= "Patch occupancy")
 
 ggsave(paste0("../figures/feasExponential.pdf"), width=6, height = 3, 
-       device = "pdf")  
-
-## Probability for extinction w/o disp. (theory and sims) --------
-Sims %>%
-  select(n, d, p, meanA, rep, NHat, vary, k, cvA) %>%
-  filter(d==min(d), meanA>0) %>%
-  select(-d) %>%
-  mutate(fractionExct = map_dbl(NHat, ~.x %>%
-                          filter(sp==1, density<extinctionThreshold)%>%
-                          nrow)/p) %>%
-  group_by(n, p, meanA, cvA, k, vary) %>%
-  summarise(meanProb = mean(fractionExct),
-            sdProb = sd(fractionExct)) %>%
-  left_join(Predictions %>% filter(d==min(d))%>%select(-d), 
-            by=c("meanA", "p", "n")) %>%
-  ggplot() + 
-  theme_bw() +
-  scale_linetype_manual(values=rep("solid", 1000)) + 
-  scale_alpha_manual(values=c(1, 0.4)) + 
-  scale_color_viridis_c(option="plasma", end=0.9) +
-  geom_point(aes(x=meanA, y=meanProb, alpha=as.factor(k))) + 
-  geom_errorbar(aes(x=meanA, ymin=meanProb-sdProb, width=0.05,
-                    ymax=meanProb+sdProb, alpha=as.factor(k))) +
-  aes(x=meanA, y=probN0iExt, group=as.factor(k), 
-      alpha=as.factor(k)) + #,,  
-  geom_line(show.legend = F) + 
-  #scale_color_gradient(low = "yellow", high = "red") +
-  facet_grid(cols=vars(cvA), rows=vars(vary), labeller = label_both) +
-  labs(x="a", 
-       y="Probability that sp. i \n gets excluded w/o disp.", 
-       alpha="k")
-
-ggsave(paste0("../figures/PNi0Excl.pdf"), width=6, height = 3, 
        device = "pdf")  
 
 # Leftovers -----
@@ -327,3 +285,36 @@ IntPredsAndSims |>
 
 ggsave(paste0("../figures/fm.pdf"), width=4.5, height = 3, 
        device = "pdf")
+
+## Probability for extinction w/o disp. (theory and sims) --------
+Sims %>%
+  select(n, d, p, meanA, rep, NHat, vary, k, cvA) %>%
+  filter(d==min(d), meanA>0) %>%
+  select(-d) %>%
+  mutate(fractionExct = map_dbl(NHat, ~.x %>%
+                                  filter(sp==1, density<extinctionThreshold)%>%
+                                  nrow)/p) %>%
+  group_by(n, p, meanA, cvA, k, vary) %>%
+  summarise(meanProb = mean(fractionExct),
+            sdProb = sd(fractionExct)) %>%
+  left_join(Predictions %>% filter(d==min(d))%>%select(-d), 
+            by=c("meanA", "p", "n")) %>%
+  ggplot() + 
+  theme_bw() +
+  scale_linetype_manual(values=rep("solid", 1000)) + 
+  scale_alpha_manual(values=c(1, 0.4)) + 
+  scale_color_viridis_c(option="plasma", end=0.9) +
+  geom_point(aes(x=meanA, y=meanProb, alpha=as.factor(k))) + 
+  geom_errorbar(aes(x=meanA, ymin=meanProb-sdProb, width=0.05,
+                    ymax=meanProb+sdProb, alpha=as.factor(k))) +
+  aes(x=meanA, y=probN0iExt, group=as.factor(k), 
+      alpha=as.factor(k)) + #,,  
+  geom_line(show.legend = F) + 
+  #scale_color_gradient(low = "yellow", high = "red") +
+  facet_grid(cols=vars(cvA), rows=vars(vary), labeller = label_both) +
+  labs(x="a", 
+       y="Probability that sp. i \n gets excluded w/o disp.", 
+       alpha="k")
+
+ggsave(paste0("../figures/PNi0Excl.pdf"), width=6, height = 3, 
+       device = "pdf")  
