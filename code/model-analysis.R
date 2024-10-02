@@ -96,7 +96,6 @@ ggsave(paste0("../figures/Nk.pdf"), width=3, height = 3,
        device = "pdf")
 
 # PREDICTIONS OF PATCH OCCUPANCY -----
-## Make the predictions for when all assumptions are met
 Predictions <- Predictions_NK |>
   filter(meanA > 0) |> #Otherwise error when computing sample_ri
   nest_by(n, meanA, p, NTotalKPredicted) |>
@@ -107,7 +106,7 @@ Predictions <- Predictions_NK |>
                        mutate(meanN1Exc=mean(N1iExc, na.rm=T), #mean across patches of Ni1 in case of exclusion w/o dispersal. Because we sample 1 species per patch, this is the same as taking a mean across species
                               meanrho = mean(rhoi, na.rm=T), #same type of mean, but now of rhoi
                               .by = m))) |>  
-  expand_grid(d = seq(-6,-0, length.out=10)) |> #Create a gradient of dispersal values
+  expand_grid(d = seq(-6,-0, length.out=50)) |> #Create a gradient of dispersal values
   mutate(d=10^d) |>
   (\(x) mutate(x, samples = pmap(x, sample_random_Ni)))() |> #Sample random values for Ni (density of i with dispersal)
   mutate(probExc = map_dbl(samples, ~sum(.x$NiExc>extinctionThreshold)/length(.x$NiExc)), #Compute probabilities that > threshold
@@ -117,13 +116,15 @@ Predictions <- Predictions_NK |>
   (\(x) mutate(x, prob2 = pmap_dbl(x, get_patch_occupancy)))() |>
   select(!data & !A)
 
-saveRDS(Predictions, file=paste("../simulated-data/Predictions.RDS",sep=""))
+Predictions_IGR <- Predictions |>
+  filter(d==min(d), p == 100) |>
+  select(all_of(c("meanA", "samples", "p"))) |>
+  unnest(samples)
+  
+saveRDS(Predictions |> select(!samples), file=paste("../simulated-data/Predictions.RDS",sep=""))
 
 ## Illustrate predictions of NtotalK and negative IGR ----
-NegIGR <- Predictions |> 
-  filter(d==min(d)) |>
-  select(all_of(c("meanA", "samples", "p"))) |>
-  unnest(samples) |>
+NegIGR <- Predictions_IGR |> 
   ggplot() +
   theme_bw() +
   theme(panel.grid = element_blank()) +
@@ -201,7 +202,7 @@ ggplot(SimsSum |>
   labs(x=expression(paste("log"[10],"(D)")), 
        y="nr. of patches", fill="Patch occupancy")
 
-ggsave(paste0("../figures/feasIdeal.pdf"), width=6, height = 2, 
+ggsave(paste0("../figures/patch-occupancy-met.pdf"), width=6, height = 2, 
        device = "pdf")  
 
 #Plot for when not met
@@ -210,13 +211,13 @@ ggplot(SimsSum |> filter(dispType == "exponentialD",
   theme_bw() +
   theme(panel.grid = element_blank()) +
   scale_fill_viridis_c(option="plasma", end=0.9) +
-  geom_point(aes(x=log10(d), y=p, fill = meanProb), pch = 21, cex=5) +
+  geom_point(aes(x=log10(d), y=p, fill = meanProb), pch = 21, cex=3) +
   facet_grid(k~meanA, 
              labeller = label_bquote(cols = paste(bar(a), " = ", .(meanA)))) +
   labs(x = expression(paste("log"[10],"(D)")), 
        y = "nr of patches, p", fill= "Patch occupancy")
 
-ggsave(paste0("../figures/feasExponential.pdf"), width=6, height = 3, 
+ggsave(paste0("../figures/patch-occupancy-not-met.pdf"), width=6, height = 3, 
        device = "pdf")  
 
 # Leftovers -----
