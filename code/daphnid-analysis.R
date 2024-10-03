@@ -10,10 +10,12 @@ island_measures <- read_csv("../data/Ebert/Frederik_data1/Island_measures_vers4.
 counts          <- read_csv("../data/Ebert/Frederik_data1/Daphnia_dynamics_1982_2017_2.csv") |>
   left_join(island_measures, by="island")
 
-desiccation     <- read_csv("../data/Ebert/Frederik_data1/Data_hydroperiod_Means.csv") |>
-  separate_wider_delim(poolname, delim = "-", names = c("island", "pool")) |>
+#desiccation     <- read_csv("../data/Ebert/Frederik_data1/Data_hydroperiod_Means.csv") |>
+desiccation     <- read_csv("../data/Ebert/hydro.csv") |>
+  separate_wider_delim(pool, delim = "-", names = c("island", "pool")) |>
   left_join(island_measures, by="island") |>
-  summarise(desiccation = mean(meandesi, na.rm = T), .by = cluster) |>
+  summarise(desiccation = mean(predicted_desiccation_events, na.rm = T), 
+            .by = c(year, cluster)) |>
   remove_missing()
 
 plant_cover <- read_csv("../data/Ebert/Frederik_data1/plantcover_2013_2017.csv") |>
@@ -85,7 +87,7 @@ test<-counts |>
   #fraction of pools with given richness level
   mutate(fraction = n / sum(n), .by = c("cluster", "p", "sample", "year")) |> #, "author"
   #add desiccation data
-  left_join(desiccation, by = join_by(cluster)) |>
+  left_join(desiccation, by = join_by(cluster, year)) |>
   #add environmental heterogeneity
   left_join(heterogeneity, by= join_by(cluster)) 
 
@@ -95,10 +97,9 @@ test |>
   ggplot() +
   scale_color_viridis_d(option="plasma", end=0.9) +
   aes(x=desiccation, y=fraction, 
-      col=as.factor(richness),
-      group=interaction(as.factor(richness), as.factor(year))) + 
+      col=as.factor(richness)) + 
   geom_point() +
-  #facet_grid(.~sample, scales = "free", labeller = label_both) +
+  #facet_grid(as.factor(richness)~sample, scales = "free", labeller = label_both) +
   geom_smooth(lwd=0.5, method = lm, se=F, show.legend = F) + 
   labs(y = "fraction", col="richness")
 
