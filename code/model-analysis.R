@@ -13,43 +13,18 @@ Sims <- readRDS(file="../simulated-data/all-data.RDS")
 ## Recover the distribution of the growth rates --------
 Rs     <- Sims |> 
   #Only keep a factorial combo, since the same Rs are being sampled everywhere
-  filter(meanA==0.2, d==min(d), vary==0, k==1, cvA==0, p==80, 
+  filter(meanA==0.5, d==min(d), vary==0, k==1, cvA==0, p==50, 
          rep==1) |> 
   select(R) |>
   unnest(R)
 pdfRs  <- density(Rs$R, from=0)
 meanR  <- sum(pdfRs$x*pdfRs$y)/sum(pdfRs$y)#grant mean of R
 
-# PLOTS TO GET INTUITION -----
-Sims |> 
-  filter(meanA %in% c(0.2, 0.8), vary == 0, log10(d) < -4,
-         k == 1, cvA == 0.2, p == 40, 
-         dispType == "regularD") |>
-  select(!R & !NHat & !NTotalK) |>
-  unnest(summaryM) |>
-  mutate(m = as.numeric(as.character(m))) |>
-  mutate(fraction = nrPatches / p) |>
-  summarise(median_fraction = median(fraction), 
-            min_fraction = quantile(fraction, 0.25),
-            max_fraction = quantile(fraction, 0.75),
-            .by = c(m, d, meanA)) |>
-  ggplot() +
-  scale_color_viridis_d(option="plasma", end=0.9) +
-  theme_bw() +
-  theme(panel.grid = element_blank()) +
-  aes(x=log10(d), y=median_fraction, col=as.factor(m)) +
-  geom_line() + 
-  #geom_errorbar(aes(x=log10(d), ymin=min_fraction, 
-  #                  ymax=max_fraction, col=as.factor(m), 
-  #                  width = 0.1)) +
-  facet_grid(.~meanA, 
-             labeller = label_bquote(cols=paste(bar(a),"=", .(meanA)))) +
-  labs(y = "fraction", col = "local richness", x = "log10 of dispersal rate")
 
 # PREDICTIONS of fm and NTotalK, for diffuse competition ----
 ## Predictions of fm -----
 Predictions_fm <- expand_grid(n = 6, m = c(1:6), iteration = c(1:10),
-                   meanA = seq(0, 0.8, 0.05)) |>
+                   meanA = seq(0.05, 0.8, 0.05)) |>
   mutate(meanA = if_else(meanA==1, meanA+1e-5, meanA)) |> #Avoid matrices with det()=0
   (\(x) mutate(x, fmPredicted = pmap_dbl(x, get_fraction_m)))() |>
   #fm isn't calculated correctly for m = 1, so get it here as 1 - sum of fm for 2 to 6
@@ -85,7 +60,7 @@ NtotalK <- ggplot(Predictions_NK |>
   scale_fill_viridis_c(option="plasma", end=0.9) +
   geom_tile(aes(x=meanA, fill=log10(meanNTotalKPredicted), 
                 y=p)) +
-  labs(x="interaction strength, a", 
+  labs(x="interaction strength, a", y = "nr of patches, p", 
        fill=expression(paste("log"[10],"(", Sigma[{k}],"N"[{"0,i"}]^{(k)}, ")"))) +
   theme(legend.position="bottom")
 #labs(x=expression(paste(Sigma[{k}],"N"[{"0,i"}]^{(k)},~"simulated")), 
@@ -115,13 +90,15 @@ Predictions <- Predictions_NK |>
   mutate(Xi = map_dbl(A, ~feasibility(.x))) |>
   (\(x) mutate(x, prob2 = pmap_dbl(x, get_patch_occupancy)))() |>
   select(!data & !A)
+#saveRDS(Predictions |> select(!samples), file=paste("../simulated-data/Predictions.RDS",sep=""))
 
 Predictions_IGR <- Predictions |>
   filter(d==min(d), p == 100) |>
   select(all_of(c("meanA", "samples", "p"))) |>
   unnest(samples)
-  
-saveRDS(Predictions |> select(!samples), file=paste("../simulated-data/Predictions.RDS",sep=""))
+#saveRDS(Predictions_IGR, file=paste("../simulated-data/Predictions_IGR.RDS",sep=""))  
+
+Predictions <- readRDS(file="../simulated-data/Predictions.RDS")
 
 ## Illustrate predictions of NtotalK and negative IGR ----
 NegIGR <- Predictions_IGR |> 
@@ -137,45 +114,44 @@ NegIGR <- Predictions_IGR |>
 
 ## Plot predictions of prob, conditional on i excluded w/o disp. ----
 probExc <- ggplot(Predictions |> 
-                    filter(meanA %in% c(0.1, 0.8), log10(d) < -4)) + 
+                    filter(meanA %in% c(0.2, 0.5), log10(d) < -4)) + 
   theme_bw() +
   theme(panel.grid = element_blank()) +
   scale_fill_viridis_c(option="plasma", end=0.9) +
   aes(x=log10(d), y=p, fill=probExc) + 
   geom_tile() +
   #geom_point() +
-  labs(x=expression(paste("log"[10],"(D)")), 
-       fill=expression(paste("P(N"[i],">0 | N"[i0],"=0)")),
-       y="nr of patches") + 
+  labs(x=expression(paste("dispersal rate, log"[10],"(D)")), 
+       fill=expression(paste("P(N"[i],">0 | N"["0i"],"=0)")),
+       y="nr of patches, p") + 
   facet_grid(.~meanA, 
              labeller = label_bquote(cols=paste("a = ",.(meanA)))) +
   theme(legend.position="bottom")
 
-case1 <- grid.arrange(NtotalK, NegIGR, probExc, 
-                      layout_matrix = rbind(c(1, 2), c(3, 3)), 
-                      widths=c(1,1)) 
+case1 <- (NtotalK | NegIGR) / probExc + plot_annotation(tag_levels = "A") 
 
 ggsave(paste0("../figures/case1.pdf"), case1, 
        width=5, height = 7.5, device = "pdf")  
 
 ## Plot Case 2
-probExc <- ggplot(Predictions |> 
-                    filter(meanA %in% c(0.1, 0.8), log10(d) < -4)) + 
+probPer <- ggplot(Predictions |> 
+                    filter(meanA %in% c(0.2, 0.5), log10(d) < -4)) + 
   theme_bw() +
   theme(panel.grid = element_blank()) +
-  scale_fill_viridis_c(option="plasma", end=0.9) +
+  scale_fill_viridis_c(option="plasma", end=0.9, 
+                       n.breaks = 2) +
   aes(x=log10(d), y=p, fill=probPer) + 
   geom_tile() +
-  labs(x=expression(paste("log"[10],"(D)")), 
+  labs(x=expression(paste("dispersal rate, log"[10],"(D)")), 
        y="nr of patches", 
-       fill=expression(paste("P(N"[i],">0 | N"[0i],">0)")),
+       fill=expression(paste("P(N"[i],">0 | N"["0i"]," > 0)")),
        col="a") +
   facet_grid(.~meanA, 
              labeller = label_bquote(cols=paste("a = ",.(meanA)))) +
   theme(legend.position="bottom")
 
-ggsave(paste0("../figures/case2.pdf"), probExc, 
-       width=3, height = 3, device = "pdf")  
+ggsave(paste0("../figures/case2.pdf"), probPer, 
+       width=4, height = 3, device = "pdf")  
 
 ## Summarize simulated data to add to predictions -----
 SimsSum <- Sims |> 
@@ -188,22 +164,22 @@ SimsSum <- Sims |>
 
 #Plot for when all assumptions are met, but allowing d to be large
 ggplot(SimsSum |>
-         filter(dispType == "regularD", 
-                meanA<1, k=="Regional equivalence", cvA==0, vary==0)) + 
+         filter(dispType == "regularD", meanA < 1,
+                k=="Regional equivalence", cvA==0, vary==0)) + 
   theme_bw() +
   theme(panel.grid = element_blank()) +
   scale_fill_viridis_c(option="plasma", end=0.9) +
-  geom_tile(data=Predictions |> filter(meanA %in% c(0.2, 0.4, 0.8)), 
+  geom_tile(data=Predictions |> filter(meanA %in% c(0.2, 0.5)), 
               aes(x=log10(d), y=p, fill = prob2), show.legend = F) +
   geom_point(aes(x=log10(d), y=p, fill=meanProb), col = "white", 
-             pch = 21, cex=3) +
+             pch = 21, cex=2) +
   facet_grid(.~meanA, 
              labeller = label_bquote(cols=paste("a = ", .(meanA)))) +
-  labs(x=expression(paste("log"[10],"(D)")), 
-       y="nr. of patches", fill="Patch occupancy")
+  labs(x=expression(paste("dispersal rate, log"[10],"(D)")), 
+       y="nr. of patches, p", fill="patch occupancy")
 
-ggsave(paste0("../figures/patch-occupancy-met.pdf"), width=6, height = 2, 
-       device = "pdf")  
+ggsave(paste0("../figures/patch-occupancy-met.pdf"), 
+       width=5, height = 2, device = "pdf")  
 
 #Plot for when not met
 ggplot(SimsSum |> filter(dispType == "exponentialD", 
@@ -211,14 +187,14 @@ ggplot(SimsSum |> filter(dispType == "exponentialD",
   theme_bw() +
   theme(panel.grid = element_blank()) +
   scale_fill_viridis_c(option="plasma", end=0.9) +
-  geom_point(aes(x=log10(d), y=p, fill = meanProb), pch = 21, cex=3) +
+  geom_tile(aes(x=log10(d), y=p, fill = meanProb)) +#, pch = 21, cex=3
   facet_grid(k~meanA, 
              labeller = label_bquote(cols = paste(bar(a), " = ", .(meanA)))) +
-  labs(x = expression(paste("log"[10],"(D)")), 
-       y = "nr of patches, p", fill= "Patch occupancy")
+  labs(x = expression(paste("dispersal rate, log"[10],"(D)")), 
+       y = "nr of patches, p", fill= "patch occupancy")
 
-ggsave(paste0("../figures/patch-occupancy-not-met.pdf"), width=6, height = 3, 
-       device = "pdf")  
+ggsave(paste0("../figures/patch-occupancy-not-met.pdf"), 
+       width=8, height = 4, device = "pdf")  
 
 # Leftovers -----
 ## showcase accuracy of mean r -----
@@ -319,3 +295,29 @@ Sims %>%
 
 ggsave(paste0("../figures/PNi0Excl.pdf"), width=6, height = 3, 
        device = "pdf")  
+
+# PLOTS TO GET INTUITION -----
+Sims |> 
+  filter(meanA %in% c(0.2, 0.5), vary == 0, log10(d) < -4,
+         k == 1, cvA == 0.2, p == 40, 
+         dispType == "regularD") |>
+  select(!R & !NHat & !NTotalK) |>
+  unnest(summaryM) |>
+  mutate(m = as.numeric(as.character(m))) |>
+  mutate(fraction = nrPatches / p) |>
+  summarise(median_fraction = median(fraction), 
+            min_fraction = quantile(fraction, 0.25),
+            max_fraction = quantile(fraction, 0.75),
+            .by = c(m, d, meanA)) |>
+  ggplot() +
+  scale_color_viridis_d(option="plasma", end=0.9) +
+  theme_bw() +
+  theme(panel.grid = element_blank()) +
+  aes(x=log10(d), y=median_fraction, col=as.factor(m)) +
+  geom_line() + 
+  #geom_errorbar(aes(x=log10(d), ymin=min_fraction, 
+  #                  ymax=max_fraction, col=as.factor(m), 
+  #                  width = 0.1)) +
+  facet_grid(.~meanA, 
+             labeller = label_bquote(cols=paste(bar(a),"=", .(meanA)))) +
+  labs(y = "fraction", col = "local richness", x = "log10 of dispersal rate")
