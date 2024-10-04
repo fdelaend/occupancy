@@ -11,12 +11,27 @@ counts          <- read_csv("../data/Ebert/Frederik_data1/Daphnia_dynamics_1982_
   left_join(island_measures, by="island")
 
 #desiccation     <- read_csv("../data/Ebert/Frederik_data1/Data_hydroperiod_Means.csv") |>
-desiccation     <- read_csv("../data/Ebert/hydro.csv") |>
-  separate_wider_delim(pool, delim = "-", names = c("island", "pool")) |>
+desiccation_static <- read_csv("../data/Ebert/Frederik_data1/Data_hydroperiod_Means.csv") |>
+  expand_grid(year = c(min(counts$year):max(counts$year)))
+
+desiccation        <- desiccation_static |>
+  left_join(read_csv("../data/Ebert/hydro.csv"), 
+            by = join_by(poolname == pool, year)) |> 
+  separate_wider_delim(poolname, delim = "-", names = c("island", "pool")) |>
   left_join(island_measures, by="island") |>
-  summarise(desiccation = mean(predicted_desiccation_events, na.rm = T), 
-            .by = c(year, cluster)) |>
-  remove_missing()
+  summarise(desiccation_dynamic  = mean(predicted_desiccation_events, na.rm = T),
+            desiccation_static_mean_mean   = mean(meandesi, na.rm = T),
+            desiccation_static_mean_median = mean(mediandesi, na.rm = T),
+            desiccation_static_median_median = median(mediandesi, na.rm = T),
+            desiccation_static_median_mean = median(meandesi, na.rm = T),
+            .by = c(year, cluster))
+
+ggplot(desiccation) +
+  scale_color_viridis_d(option="plasma", end=0.9) +
+  aes(x = desiccation_static_mean_mean, y = desiccation_dynamic, 
+      col = as.factor(year)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = F)
 
 plant_cover <- read_csv("../data/Ebert/Frederik_data1/plantcover_2013_2017.csv") |>
   remove_missing() |>
@@ -93,18 +108,16 @@ test<-counts |>
 
 #plot of fraction vs. nr of patches p or desiccation
 test |>
-  filter(sample == 1) |>
   ggplot() +
   scale_color_viridis_d(option="plasma", end=0.9) +
-  aes(x=desiccation, y=fraction, 
-      col=as.factor(richness)) + 
+  aes(x=desiccation_static_mean_mean, y=fraction, 
+      col=as.factor(year)) + 
   geom_point() +
-  #facet_grid(as.factor(richness)~sample, scales = "free", labeller = label_both) +
-  geom_smooth(lwd=0.5, method = lm, se=F, show.legend = F) + 
-  labs(y = "fraction", col="richness")
+  facet_grid(as.factor(richness)~sample, scales = "free", labeller = label_both) +
+  geom_smooth(lwd=0.5, method = lm, se=F, show.legend = F) 
 
 ggplot(test) + 
-  aes(x=p, y=desiccation) + 
+  aes(x=p, y=desiccation_dynamic) + 
   geom_point()
 
 # ggsave("../figures/desiccation.pdf", width=4, height=3)
@@ -114,7 +127,9 @@ ggplot(test) +
 # Hard to see so check out the slopes of fraction vs. predictor (p or desiccation)
 slopes <- test %>%
   nest_by(sample, richness, year) %>%
-  expand_grid(predictor = c("p", "desiccation")) %>%
+  expand_grid(predictor = c("p", "desiccation_static_mean_mean")) %>%
+  #mutate(n = map_dbl(data, ~ nrow(.x |> remove_missing()))) |>
+  #filter(n > 0) |>
   mutate(formula = map(predictor, ~paste("fraction~",.x))) %>%
   mutate(slope = map2_dbl(data, formula, ~lm(data=.x, formula=as.formula(.y))$coefficients[[2]]))
 
