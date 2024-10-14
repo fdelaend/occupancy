@@ -97,50 +97,51 @@ test<-counts |>
   filter(richness > 0) |>
   #total nr of pools per cluster, across all sampling events
   mutate(p = length(unique(poolname)), .by = cluster) |>
-  #number of pools per richness level in a given cluster at a given sampling event in a given year
-  summarize(n = length(unique(poolname)), .by = c("cluster", "p", "sample", "year", "richness")) |> #, "author"
+  #number of pools evaluated in a given cluster at a given sampling event in a given year
+  mutate(n = length(unique(poolname)), 
+         .by = c(cluster, sample, year)) |> 
+  #remove all cluster - sampling event - year combos that have too small n
+  filter(n > 20) |>
+  #the weight of a single pool is 1/n. 
+  #Making the sum across richness levels seems a tidy way to get the fraction of pools per richness level
+  mutate(weight = 1/n) |>
   #fraction of pools with given richness level
-  mutate(fraction = n / sum(n), .by = c("cluster", "p", "sample", "year")) |> #, "author"
+  summarise(fraction = sum(weight), 
+         .by = c(cluster, p, sample, year, richness, n)) |> #, "author"
   #add desiccation data
   left_join(desiccation, by = join_by(cluster, year)) |>
   #add environmental heterogeneity
-  left_join(heterogeneity, by= join_by(cluster)) 
+  left_join(heterogeneity, by= join_by(cluster)) |>
+  filter(!is.na(desiccation_dynamic))
 
 #plot of fraction vs. nr of patches p or desiccation
 test |>
+  filter(richness < 3) |>
   ggplot() +
   scale_color_viridis_d(option="plasma", end=0.9) +
-  aes(x=desiccation_static_mean_mean, y=fraction, 
-      col=as.factor(year)) + 
-  geom_point() +
+  aes(x=desiccation_dynamic, y=fraction, 
+      col=as.factor(year)) +
+  geom_point() + 
   facet_grid(as.factor(richness)~sample, scales = "free", labeller = label_both) +
   geom_smooth(lwd=0.5, method = lm, se=F, show.legend = F) 
 
-ggplot(test) + 
-  aes(x=p, y=desiccation_dynamic) + 
-  geom_point()
+library(lme4)
+
+model <- glmer(data = test |> 
+                 filter(richness == 2) |>
+                 mutate(year = as.factor(year)), 
+             formula = fraction ~ desiccation_dynamic + (1|year), 
+             family = binomial, 
+             weights = n)
+
+summary(model)
+plot(model)
+plot(predict(model, type = "response"), 
+     (test |> filter(richness == 2))$fraction)
 
 # ggsave("../figures/desiccation.pdf", width=4, height=3)
 # ggsave("../figures/p.pdf", width=6, height=4)
 # ggsave("../figures/desiccation-poly.pdf", width=6, height=4)
-
-# Hard to see so check out the slopes of fraction vs. predictor (p or desiccation)
-slopes <- test %>%
-  nest_by(sample, richness, year) %>%
-  expand_grid(predictor = c("p", "desiccation_static_mean_mean")) %>%
-  #mutate(n = map_dbl(data, ~ nrow(.x |> remove_missing()))) |>
-  #filter(n > 0) |>
-  mutate(formula = map(predictor, ~paste("fraction~",.x))) %>%
-  mutate(slope = map2_dbl(data, formula, ~lm(data=.x, formula=as.formula(.y))$coefficients[[2]]))
-
-ggplot(slopes) + 
-  theme_bw() +
-  aes(x=as.factor(richness), y=slope) + 
-  geom_boxplot() + 
-  facet_grid(predictor~sample, scales = "free", labeller = label_both) +
-  geom_hline(yintercept = 0) +
-  labs(x = "richness", y = "effect")
-# ggsave("../figures/slope.pdf", width=6, height=4)
 
 #Dominance of a given species?
 dom <- counts |>
@@ -170,6 +171,7 @@ ggplot(dom) +
   geom_smooth(lwd=0.5, method = lm, se=F, show.legend = F)
 # ggsave("../figures/dom.pdf", width=6, height=4)
 
+# LEFTOVERS ----------
 
 # Result 1: effect of mean desiccation: more single sp patches, fewer pairs, a bit more triplets
 # Result 2: effect of nr of patches: fewer single sp patches 
@@ -177,3 +179,22 @@ ggplot(dom) +
   # Homogeneity of environmental conditions? Or pH, conductivity, plants not most important? Heterogeneity similar across all clusters
   # Regional dominant? Not supported by the model? Pulex (and sometimes longi) according to the data?
 
+
+# Hard to see so check out the slopes of fraction vs. predictor (p or desiccation)
+slopes <- test |>
+  filter(richness < 3) |>
+  nest_by(sample, richness, year) %>%
+  expand_grid(predictor = c("p", "desiccation_static_mean_mean")) %>%
+  #mutate(n = map_dbl(data, ~ nrow(.x |> remove_missing()))) |>
+  #filter(n > 0) |>
+  mutate(formula = map(predictor, ~paste("fraction~",.x))) %>%
+  mutate(slope = map2_dbl(data, formula, ~lm(data=.x, formula=as.formula(.y))$coefficients[[2]]))
+
+ggplot(slopes) + 
+  theme_bw() +
+  aes(x=as.factor(richness), y=slope) + 
+  geom_boxplot() + 
+  facet_grid(predictor~sample, scales = "free", labeller = label_both) +
+  geom_hline(yintercept = 0) +
+  labs(x = "richness", y = "effect")
+# ggsave("../figures/slope.pdf", width=6, height=4)
