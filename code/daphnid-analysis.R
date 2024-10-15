@@ -147,6 +147,7 @@ model <- glmer(data = test_stats,
 summary(model)
 plot(model)
 
+#HERE ---- (double check this; why fewer data than for fractions??)
 #Dominance of a given species?
 dom <- counts |>
   mutate(richness = magna + longispina + pulex) |>
