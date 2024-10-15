@@ -1,5 +1,6 @@
 
 library(tidyverse)
+library(lme4)
 
 # READ DATA ----
 island_measures <- read_csv("../data/Ebert/Frederik_data1/Island_measures_vers4.csv") |>
@@ -77,7 +78,7 @@ plant_cover |>
       pch=cluster) + 
   geom_point() 
 
-# ANALYSE DATA ----
+# PLOT DATA ----
 # compute heterogenity
 heterogeneity <- pH_conductivity |>
   #add cluster ID
@@ -89,9 +90,9 @@ heterogeneity <- pH_conductivity |>
   remove_missing() |>
   mutate(heterogeneity_cut = factor(if_else(heterogeneity>1, "high", "low")))
 
-# add heterogeneity and desiccation to data and 
+# add desiccation to data and 
 # compute richness and fraction
-test<-counts |>
+fractions <- counts |>
   mutate(richness = magna + longispina + pulex) |>
   #remove empty pools
   filter(richness > 0) |>
@@ -110,57 +111,82 @@ test<-counts |>
          .by = c(cluster, p, sample, year, richness, n)) |> #, "author"
   #add desiccation data
   left_join(desiccation, by = join_by(cluster, year)) |>
-  #add environmental heterogeneity
-  left_join(heterogeneity, by= join_by(cluster)) |>
+  #remove na-s
   filter(!is.na(desiccation_dynamic))
 
 #plot of fraction vs. nr of patches p or desiccation
-test |>
+fractions |>
   filter(richness < 3) |>
+  mutate(sample = if_else(sample == 1, "spring", "summer")) |>
   ggplot() +
-  scale_color_viridis_d(option="plasma", end=0.9) +
-  aes(x=desiccation_dynamic, y=fraction, 
-      col=as.factor(year)) +
-  geom_point() + 
-  facet_grid(as.factor(richness)~sample, scales = "free", labeller = label_both) +
-  geom_smooth(lwd=0.5, method = lm, se=F, show.legend = F) 
+  theme_bw() +
+  scale_color_viridis_c(option="plasma", end=0.9) +
+  geom_point(aes(x=desiccation_dynamic, y=fraction, col=year)) + 
+  facet_grid(richness~sample, scales = "free", 
+             labeller = label_bquote(rows=paste("richness = ", .(richness)),
+                                     cols=paste(.(sample), " sample"))) +
+  aes(x=desiccation_dynamic, y=fraction, col=year, group=as.factor(year)) +
+  geom_smooth(lwd=0.5, method = lm, se=F, show.legend = F) +
+  labs(x = "nr of desiccation events (proxy for dispersal rate)", 
+       y = "fraction")
 
-library(lme4)
+ggsave(paste0("../figures/f_desiccation.pdf"), width=4.5, height = 3, 
+       device = "pdf")
 
-model <- glmer(data = test |> 
-                 filter(richness == 2) |>
-                 mutate(year = as.factor(year)), 
-             formula = fraction ~ desiccation_dynamic + (1|year), 
-             family = binomial, 
-             weights = n)
+# STATS ----
+# prep data for stats
+test_stats <- test |>
+  filter(richness == 2, sample == 2) |>
+  select(p, year, n, fraction, desiccation_dynamic) |>
+  mutate(year = as.factor(year))
+
+model <- glmer(data = test_stats, 
+               formula = fraction ~ desiccation_dynamic + (1|year), 
+               family = binomial, weights = n)
 
 summary(model)
 plot(model)
-plot(predict(model, type = "response"), 
-     (test |> filter(richness == 2))$fraction)
-
-# ggsave("../figures/desiccation.pdf", width=4, height=3)
-# ggsave("../figures/p.pdf", width=6, height=4)
-# ggsave("../figures/desiccation-poly.pdf", width=6, height=4)
 
 #Dominance of a given species?
 dom <- counts |>
-  mutate(richness = magna + longispina + pulex, 
-         only_magna = (magna)*(1-longispina)*(1-pulex),
-         only_longi = (1-magna)*(longispina)*(1-pulex),
-         only_pulex = (1-magna)*(1-longispina)*(pulex)) |>
-  select(!magna, !longispina, !pulex) |>
-  pivot_longer(starts_with("only"), 
-               names_to = "species", values_to = "value") |>
+  mutate(richness = magna + longispina + pulex) |>
   #remove empty pools
   filter(richness > 0) |>
   #total nr of pools per cluster, across all sampling events
   mutate(p = length(unique(poolname)), .by = cluster) |>
+  #number of pools evaluated in a given cluster at a given sampling event in a given year
+  mutate(n = length(unique(poolname)), 
+         .by = c(cluster, sample, year)) |> 
+  #remove all cluster - sampling event - year combos that have too small n
+  filter(n > 20) |>
+  mutate(only_magna = (magna)*(1-longispina)*(1-pulex),
+         only_longi = (1-magna)*(longispina)*(1-pulex),
+         only_pulex = (1-magna)*(1-longispina)*(pulex)) |>
+  select(!magna & !longispina & !pulex & !water & !author & !richness) |>
+  pivot_longer(starts_with("only"), 
+               names_to = "species", values_to = "value") |>
   #fraction of pools with only species x
-  summarize(fraction = sum(value) / length(unique(poolname)), 
-            .by = c("cluster", "p", "sample", "species", "year")) |> #, "author"
+  summarize(fraction = sum(value) / mean(n), 
+            .by = c(cluster, p, sample, year, species, n)) |> #, "author"
   #add desiccation data
-  left_join(desiccation, by = join_by(cluster))  
+  left_join(desiccation, by = join_by(cluster, year))  
+
+dom |>
+  mutate(sample = if_else(sample == 1, "spring", "summer")) |>
+  ggplot() +
+  theme_bw() +
+  scale_color_viridis_c(option="plasma", end=0.9) +
+  geom_point(aes(x=desiccation_dynamic, y=fraction, col=year)) +
+  facet_grid(species~sample, scales = "free", 
+             labeller = label_bquote(rows=paste("species = ", .(species)),
+                                     cols=paste(.(sample), " sample"))) +
+  aes(x=desiccation_dynamic, y=fraction, col=year, group=as.factor(year)) +
+  geom_smooth(lwd=0.5, method = lm, se=F, show.legend = F) +
+  labs(x = "nr of desiccation events (proxy for dispersal rate)", 
+       y = "fraction")
+
+ggsave(paste0("../figures/f_desiccation.pdf"), width=4.5, height = 3, 
+       device = "pdf")
 
 ggplot(dom) + 
   theme_bw() +
