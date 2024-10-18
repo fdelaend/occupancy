@@ -108,7 +108,7 @@ fractions <- counts |>
   mutate(weight = 1/n) |>
   #fraction of pools with given richness level
   summarise(fraction = sum(weight), 
-         .by = c(cluster, p, sample, year, richness, n)) |> #, "author"
+            .by = c(cluster, p, sample, year, richness, n)) |> #, "author"
   #add desiccation data
   left_join(desiccation, by = join_by(cluster, year)) |>
   #remove na-s
@@ -135,12 +135,12 @@ ggsave(paste0("../figures/f_desiccation.pdf"), width=4.5, height = 3,
 
 # STATS ----
 # prep data for stats
-test_stats <- test |>
+data <- test |>
   filter(richness == 2, sample == 2) |>
   select(p, year, n, fraction, desiccation_dynamic) |>
   mutate(year = as.factor(year))
 
-model <- glmer(data = test_stats, 
+model <- glmer(data = data, 
                formula = fraction ~ desiccation_dynamic + (1|year), 
                family = binomial, weights = n)
 
@@ -160,9 +160,9 @@ dom <- counts |>
          .by = c(cluster, sample, year)) |> 
   #remove all cluster - sampling event - year combos that have too small n
   filter(n > 20) |>
-  mutate(only_magna = (magna)*(1-longispina)*(1-pulex),
-         only_longi = (1-magna)*(longispina)*(1-pulex),
-         only_pulex = (1-magna)*(1-longispina)*(pulex)) |>
+  mutate(`only magna` = (magna)*(1-longispina)*(1-pulex),
+         `only longi` = (1-magna)*(longispina)*(1-pulex),
+         `only pulex` = (1-magna)*(1-longispina)*(pulex)) |>
   select(!magna & !longispina & !pulex & !water & !author & !richness) |>
   pivot_longer(starts_with("only"), 
                names_to = "species", values_to = "value") |>
@@ -170,7 +170,9 @@ dom <- counts |>
   summarize(fraction = sum(value) / mean(n), 
             .by = c(cluster, p, sample, year, species, n)) |> #, "author"
   #add desiccation data
-  left_join(desiccation, by = join_by(cluster, year))  
+  left_join(desiccation, by = join_by(cluster, year)) |>
+  filter(!is.na(desiccation_dynamic))
+
 
 dom |>
   mutate(sample = if_else(sample == 1, "spring", "summer")) |>
@@ -179,14 +181,14 @@ dom |>
   scale_color_viridis_c(option="plasma", end=0.9) +
   geom_point(aes(x=desiccation_dynamic, y=fraction, col=year)) +
   facet_grid(species~sample, scales = "free", 
-             labeller = label_bquote(rows=paste("species = ", .(species)),
+             labeller = label_bquote(rows=paste(.(species)),
                                      cols=paste(.(sample), " sample"))) +
   aes(x=desiccation_dynamic, y=fraction, col=year, group=as.factor(year)) +
   geom_smooth(lwd=0.5, method = lm, se=F, show.legend = F) +
   labs(x = "nr of desiccation events (proxy for dispersal rate)", 
        y = "fraction")
 
-ggsave(paste0("../figures/f_desiccation.pdf"), width=4.5, height = 3, 
+ggsave(paste0("../figures/f_dom.pdf"), width=4.5, height = 4, 
        device = "pdf")
 
 ggplot(dom) + 
@@ -197,6 +199,15 @@ ggplot(dom) +
   facet_grid(sample~species) +
   geom_smooth(lwd=0.5, method = lm, se=F, show.legend = F)
 # ggsave("../figures/dom.pdf", width=6, height=4)
+
+data <- dom |> filter(species == "only_longi", sample == 2) |> 
+  select(fraction, n, desiccation_dynamic, year)
+# try a model 
+model <- glmer(fraction ~ desiccation_dynamic + 
+                 (1 + desiccation_dynamic | year), 
+               data = data, weight = n, 
+               family = binomial(link = "logit"))
+summary(model)
 
 # LEFTOVERS ----------
 
