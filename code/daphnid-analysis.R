@@ -34,61 +34,10 @@ ggplot(desiccation) +
   geom_point() +
   geom_smooth(method = "lm", se = F)
 
-plant_cover <- read_csv("../data/Ebert/Frederik_data1/plantcover_2013_2017.csv") |>
-  remove_missing() |>
-  # normalise across whole data set
-  summarize(plants = mean(plants_rank), 
-            .by = c("island", "pool")) |>
-  mutate(plants = (plants-mean(plants))/sd(plants))
-#plant data only for two years, also made temporal mean 
-
-pH_conductivity <- read_csv("../data/Ebert/Frederik_data1/MetapopData_pH_conductivity_1998_2017.csv") |>
-  # compute mean data across sampling occasions for every pool 
-  summarize(pH = mean(pH, na.rm = T), 
-            log_conduct = mean(log10(conduct_uS), na.rm = T), 
-            .by = c("island", "pool")) |>
-  # normalise across whole data set
-  mutate(pH = (pH-mean(pH, na.rm = T))/sd(pH, na.rm = T),
-         log_conduct = (log_conduct-mean(log_conduct, na.rm = T))/sd(log_conduct, na.rm = T)) 
-
 #location of pools
 pools           <- read_csv("../data/Ebert/Frederik_data1/Pools_coordinates_2017_vers7.csv") |>
   left_join(island_measures, by="island") |>
   select(island, pool, latitude_corr, longitude_corr, cluster) 
-
-#visualize conductivity across systems; can do the same for pH
-pH_conductivity |> 
-  left_join(pools, by = join_by(island, pool)) |>
-  filter(!is.na(latitude_corr)) |> #issue with island name resulting in coordinate not found
-  ggplot() + 
-  scale_color_viridis_c(option="plasma", end=0.9) +
-  scale_shape_manual(values = c(1:7)) +
-  aes(x=latitude_corr, y=longitude_corr, col=log_conduct, 
-      pch=cluster) + 
-  geom_point() 
-
-#Now for plant cover
-plant_cover |>
-  left_join(pools, by = join_by(island, pool)) |>
-  filter(!is.na(latitude_corr)) |> #issue with island name resulting in coordinate not found
-  ggplot() + 
-  scale_color_viridis_c(option="plasma", end=0.9) +
-  scale_shape_manual(values = c(1:7)) +
-  aes(x=latitude_corr, y=longitude_corr, col=plants, 
-      pch=cluster) + 
-  geom_point() 
-
-# PLOT DATA ----
-# compute heterogenity
-heterogeneity <- pH_conductivity |>
-  #add cluster ID
-  left_join(island_measures, by = join_by(island)) |>
-  # environmental heterogeneity across pools within a cluster
-  summarize(heterogeneity = sqrt(1/n()*sum((pH-mean(pH, na.rm=T))^2+
-                                             (log_conduct-mean(log_conduct, na.rm=T))^2, na.rm=T)), 
-            .by = cluster) |>
-  remove_missing() |>
-  mutate(heterogeneity_cut = factor(if_else(heterogeneity>1, "high", "low")))
 
 # add desiccation to data and 
 # compute richness and fraction
@@ -96,13 +45,14 @@ fractions <- counts |>
   mutate(richness = magna + longispina + pulex) |>
   #remove empty pools
   filter(richness > 0) |>
-  #total nr of pools per cluster, across all sampling events
-  mutate(p = length(unique(poolname)), .by = cluster) |>
+  #total nr of pools per cluster, taken from pools file
+  left_join(pools |> summarise(p = length(pool), .by = cluster),
+            by = join_by(cluster)) |>
   #number of pools evaluated in a given cluster at a given sampling event in a given year
   mutate(n = length(unique(poolname)), 
          .by = c(cluster, sample, year)) |> 
   #remove all cluster - sampling event - year combos that have too small n
-  filter(n > 20) |>
+  filter(n > 10) |>
   #the weight of a single pool is 1/n. 
   #Making the sum across richness levels seems a tidy way to get the fraction of pools per richness level
   mutate(weight = 1/n) |>
@@ -113,6 +63,24 @@ fractions <- counts |>
   left_join(desiccation, by = join_by(cluster, year)) |>
   #remove na-s
   filter(!is.na(desiccation_dynamic))
+
+# STATS ----
+# prep data for stats
+data <- fractions |>
+  #year = as.factor(year),
+  mutate(success = as.integer(fraction * n),
+         failure = n - as.integer(success)) |>
+  filter(richness < 3) |>
+  select(sample, richness, success, failure, desiccation_dynamic, year) |>
+  group_by(sample, richness) |>
+  nest() |>
+  ungroup() |>
+  mutate(model = map(data, ~ glm(cbind(success, failure) ~ desiccation_dynamic + year, 
+                                 family = binomial(link = "logit"), 
+                                 data = .x)),
+         summ = map(model, ~ summary(.x)))
+
+plot(data$model[[2]])
 
 #plot of fraction vs. nr of patches p or desiccation
 fractions |>
@@ -133,33 +101,16 @@ fractions |>
 ggsave(paste0("../figures/f_desiccation.pdf"), width=4.5, height = 3, 
        device = "pdf")
 
-# STATS ----
-# prep data for stats
-data <- test |>
-  filter(richness == 2, sample == 2) |>
-  select(p, year, n, fraction, desiccation_dynamic) |>
-  mutate(year = as.factor(year))
-
-model <- glmer(data = data, 
-               formula = fraction ~ desiccation_dynamic + (1|year), 
-               family = binomial, weights = n)
-
-summary(model)
-plot(model)
-
-#HERE ---- (double check this; why fewer data than for fractions??)
 #Dominance of a given species?
 dom <- counts |>
   mutate(richness = magna + longispina + pulex) |>
   #remove empty pools
   filter(richness > 0) |>
-  #total nr of pools per cluster, across all sampling events
-  mutate(p = length(unique(poolname)), .by = cluster) |>
   #number of pools evaluated in a given cluster at a given sampling event in a given year
   mutate(n = length(unique(poolname)), 
          .by = c(cluster, sample, year)) |> 
   #remove all cluster - sampling event - year combos that have too small n
-  filter(n > 20) |>
+  filter(n > 10) |>
   mutate(`only magna` = (magna)*(1-longispina)*(1-pulex),
          `only longi` = (1-magna)*(longispina)*(1-pulex),
          `only pulex` = (1-magna)*(1-longispina)*(pulex)) |>
@@ -168,11 +119,10 @@ dom <- counts |>
                names_to = "species", values_to = "value") |>
   #fraction of pools with only species x
   summarize(fraction = sum(value) / mean(n), 
-            .by = c(cluster, p, sample, year, species, n)) |> #, "author"
+            .by = c(cluster, sample, year, species, n)) |> #, "author"
   #add desiccation data
   left_join(desiccation, by = join_by(cluster, year)) |>
   filter(!is.na(desiccation_dynamic))
-
 
 dom |>
   mutate(sample = if_else(sample == 1, "spring", "summer")) |>
@@ -191,16 +141,7 @@ dom |>
 ggsave(paste0("../figures/f_dom.pdf"), width=4.5, height = 4, 
        device = "pdf")
 
-ggplot(dom) + 
-  theme_bw() +
-  scale_color_viridis_d(option="plasma", end=0.9) +
-  aes(x=desiccation, y=fraction, col=as.factor(year)) + 
-  geom_point(show.legend = F) + 
-  facet_grid(sample~species) +
-  geom_smooth(lwd=0.5, method = lm, se=F, show.legend = F)
-# ggsave("../figures/dom.pdf", width=6, height=4)
-
-data <- dom |> filter(species == "only_longi", sample == 2) |> 
+data <- dom |> filter(species == "only pulex", sample == 2) |> 
   select(fraction, n, desiccation_dynamic, year)
 # try a model 
 model <- glmer(fraction ~ desiccation_dynamic + 
@@ -208,6 +149,8 @@ model <- glmer(fraction ~ desiccation_dynamic +
                data = data, weight = n, 
                family = binomial(link = "logit"))
 summary(model)
+plot(model)
+# Pulex replaces magna as dispersal rates increase
 
 # LEFTOVERS ----------
 
@@ -236,3 +179,54 @@ ggplot(slopes) +
   geom_hline(yintercept = 0) +
   labs(x = "richness", y = "effect")
 # ggsave("../figures/slope.pdf", width=6, height=4)
+
+#visualize conductivity across systems; can do the same for pH
+pH_conductivity |> 
+  left_join(pools, by = join_by(island, pool)) |>
+  filter(!is.na(latitude_corr)) |> #issue with island name resulting in coordinate not found
+  ggplot() + 
+  scale_color_viridis_c(option="plasma", end=0.9) +
+  scale_shape_manual(values = c(1:7)) +
+  aes(x=latitude_corr, y=longitude_corr, col=log_conduct, 
+      pch=cluster) + 
+  geom_point() 
+
+#Now for plant cover
+plant_cover |>
+  left_join(pools, by = join_by(island, pool)) |>
+  filter(!is.na(latitude_corr)) |> #issue with island name resulting in coordinate not found
+  ggplot() + 
+  scale_color_viridis_c(option="plasma", end=0.9) +
+  scale_shape_manual(values = c(1:7)) +
+  aes(x=latitude_corr, y=longitude_corr, col=plants, 
+      pch=cluster) + 
+  geom_point() 
+
+# compute heterogenity
+heterogeneity <- pH_conductivity |>
+  #add cluster ID
+  left_join(island_measures, by = join_by(island)) |>
+  # environmental heterogeneity across pools within a cluster
+  summarize(heterogeneity = sqrt(1/n()*sum((pH-mean(pH, na.rm=T))^2+
+                                             (log_conduct-mean(log_conduct, na.rm=T))^2, na.rm=T)), 
+            .by = cluster) |>
+  remove_missing() |>
+  mutate(heterogeneity_cut = factor(if_else(heterogeneity>1, "high", "low")))
+
+plant_cover <- read_csv("../data/Ebert/Frederik_data1/plantcover_2013_2017.csv") |>
+  remove_missing() |>
+  # normalise across whole data set
+  summarize(plants = mean(plants_rank), 
+            .by = c("island", "pool")) |>
+  mutate(plants = (plants-mean(plants))/sd(plants))
+#plant data only for two years, also made temporal mean 
+
+pH_conductivity <- read_csv("../data/Ebert/Frederik_data1/MetapopData_pH_conductivity_1998_2017.csv") |>
+  # compute mean data across sampling occasions for every pool 
+  summarize(pH = mean(pH, na.rm = T), 
+            log_conduct = mean(log10(conduct_uS), na.rm = T), 
+            .by = c("island", "pool")) |>
+  # normalise across whole data set
+  mutate(pH = (pH-mean(pH, na.rm = T))/sd(pH, na.rm = T),
+         log_conduct = (log_conduct-mean(log_conduct, na.rm = T))/sd(log_conduct, na.rm = T)) 
+
