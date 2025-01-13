@@ -64,25 +64,15 @@ fractions <- counts |>
   #remove na-s
   filter(!is.na(desiccation_dynamic))
 
-# STATS ----
-# prep data for stats
-data <- fractions |>
-  #year = as.factor(year),
-  mutate(success = as.integer(fraction * n),
-         failure = n - as.integer(success)) |>
-  filter(richness < 3) |>
-  select(sample, richness, success, failure, desiccation_dynamic, year) |>
-  group_by(sample, richness) |>
-  nest() |>
-  ungroup() |>
-  mutate(model = map(data, ~ glm(cbind(success, failure) ~ desiccation_dynamic + year, 
-                                 family = binomial(link = "logit"), 
-                                 data = .x)),
-         summ = map(model, ~ summary(.x)))
+# CO-OCCURRENCE ----
 
-plot(data$model[[2]])
+# Co-occ of all 3 = very rare
+fractions |> 
+  summarise(n = n(), .by = richness) |>
+  mutate(n = n / sum(n))
 
-#plot of fraction vs. nr of patches p or desiccation
+## plot ----
+
 fractions |>
   filter(richness < 3) |>
   mutate(sample = if_else(sample == 1, "spring", "summer")) |>
@@ -101,7 +91,28 @@ fractions |>
 ggsave(paste0("../figures/f_desiccation.pdf"), width=4.5, height = 3, 
        device = "pdf")
 
-#Dominance of a given species?
+## stats ----
+data <- fractions |>
+  #year = as.factor(year),
+  mutate(success = as.integer(fraction * n),
+         failure = n - as.integer(success)) |>
+  filter(richness < 3) |>
+  select(sample, richness, success, failure, desiccation_dynamic, year) |>
+  group_by(sample, richness) |>
+  nest() |>
+  ungroup() |>
+  mutate(model = map(data, ~ glm(cbind(success, failure) ~ desiccation_dynamic + year, 
+                                 family = binomial(link = "logit"), 
+                                 data = .x)),
+         summ = map(model, ~ tidy(.x)))
+
+# Pulex replaces magna as dispersal rates increase
+# I tried models with interactions between year and disp, but these led to only the interaction between both being significant and not the main effects
+# I also tried making year a factor, but this led to convergence issues (too many unknown parameters)
+
+# DOMINANCE ----
+## plot ----
+
 dom <- counts |>
   mutate(richness = magna + longispina + pulex) |>
   #remove empty pools
@@ -141,15 +152,18 @@ dom |>
 ggsave(paste0("../figures/f_dom.pdf"), width=4.5, height = 4, 
        device = "pdf")
 
-data <- dom |> filter(species == "only pulex", sample == 2) |> 
-  select(fraction, n, desiccation_dynamic, year)
-# try a model 
-model <- glmer(fraction ~ desiccation_dynamic + 
-                 (1 + desiccation_dynamic | year), 
-               data = data, weight = n, 
-               family = binomial(link = "logit"))
-summary(model)
-plot(model)
+## stats ----
+data <- dom |> 
+  mutate(success = as.integer(fraction * n),
+         failure = n - as.integer(success)) |>
+  select(sample, year, species, success, failure, desiccation_dynamic, year) |>
+  group_by(sample, species) |>
+  nest() |>
+  ungroup() |>
+  mutate(model = map(data, ~ glm(cbind(success, failure) ~ desiccation_dynamic + year, 
+                                 family = binomial(link = "logit"), 
+                                 data = .x)),
+         summ = map(model, ~ tidy(.x)))
 # Pulex replaces magna as dispersal rates increase
 
 # LEFTOVERS ----------

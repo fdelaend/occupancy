@@ -99,6 +99,7 @@ Predictions_IGR <- Predictions |>
 #saveRDS(Predictions_IGR, file=paste("../simulated-data/Predictions_IGR.RDS",sep=""))  
 
 Predictions <- readRDS(file="../simulated-data/Predictions.RDS")
+Predictions_IGR <- readRDS(file="../simulated-data/Predictions_IGR.RDS")
 
 ## Illustrate predictions of NtotalK and negative IGR ----
 NegIGR <- Predictions_IGR |> 
@@ -121,7 +122,7 @@ probExc <- ggplot(Predictions |>
   aes(x=log10(d), y=p, fill=probExc) + 
   geom_tile() +
   #geom_point() +
-  labs(x=expression(paste("dispersal rate, log"[10],"(D)")), 
+  labs(x=expression(paste("dispersal rate, log"[10],"(d)")), 
        fill=expression(paste("P(N"[i],">0 | N"["0i"],"=0)")),
        y="nr of patches, p") + 
   facet_grid(.~meanA, 
@@ -142,7 +143,7 @@ probPer <- ggplot(Predictions |>
                        n.breaks = 2) +
   aes(x=log10(d), y=p, fill=probPer) + 
   geom_tile() +
-  labs(x=expression(paste("dispersal rate, log"[10],"(D)")), 
+  labs(x=expression(paste("dispersal rate, log"[10],"(d)")), 
        y="nr of patches", 
        fill=expression(paste("P(N"[i],">0 | N"["0i"]," > 0)")),
        col="a") +
@@ -175,7 +176,7 @@ ggplot(SimsSum |>
              pch = 21, cex=2) +
   facet_grid(.~meanA, 
              labeller = label_bquote(cols=paste("a = ", .(meanA)))) +
-  labs(x=expression(paste("dispersal rate, log"[10],"(D)")), 
+  labs(x=expression(paste("dispersal rate, log"[10],"(d)")), 
        y="nr. of patches, p", fill="patch occupancy")
 
 ggsave(paste0("../figures/patch-occupancy-met.pdf"), 
@@ -186,14 +187,14 @@ ggplot(SimsSum |> filter(dispType == "exponentialD",
                          vary > 0, cvA == 0.2)) + 
   theme_bw() +
   theme(panel.grid = element_blank(), 
-        panel.background = element_rect("grey")) +
+        panel.background = element_rect("lightgrey")) +
   scale_fill_viridis_c(option="plasma", end=0.9) +
   geom_point(aes(x=log10(d), y=p, fill=meanProb), col = "black", 
              pch = 21, cex=2) +
 #  geom_tile(aes(x=log10(d), y=p, fill = meanProb)) +#, pch = 21, cex=3
   facet_grid(k~meanA, 
              labeller = label_bquote(cols = paste(bar(a), " = ", .(meanA)))) +
-  labs(x = expression(paste("dispersal rate, log"[10],"(D)")), 
+  labs(x = expression(paste("dispersal rate, log"[10],"(d)")), 
        y = "nr of patches, p", fill= "patch occupancy")
 
 ggsave(paste0("../figures/patch-occupancy-not-met.pdf"), 

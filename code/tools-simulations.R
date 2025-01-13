@@ -109,7 +109,6 @@ dispMatrix <- function(coords, kernel) {
     (`diag<-`)(0) # Set all diagonal entries to 0
 }
 
-
 # Create a list of dispersal matrices over the same landscape. Each matrix is generated
 # with a specified dispersal kernel function.
 # Input:
