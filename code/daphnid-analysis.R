@@ -1,5 +1,6 @@
 
 library(tidyverse)
+library(broom)
 library(lme4)
 
 # READ DATA ----
@@ -59,6 +60,8 @@ fractions <- counts |>
   #fraction of pools with given richness level
   summarise(fraction = sum(weight), 
             .by = c(cluster, p, sample, year, richness, n)) |> #, "author"
+  #lag one year to join with correct desiccation data in next step
+  mutate(year = year - 1) |>
   #add desiccation data
   left_join(desiccation, by = join_by(cluster, year)) |>
   #remove na-s
@@ -93,15 +96,15 @@ ggsave(paste0("../figures/f_desiccation.pdf"), width=4.5, height = 3,
 
 ## stats ----
 data <- fractions |>
-  #year = as.factor(year),
-  mutate(success = as.integer(fraction * n),
-         failure = n - as.integer(success)) |>
   filter(richness < 3) |>
+  mutate(success = as.integer(fraction * n),
+         failure = n - as.integer(success),
+         year = as.factor(year)) |>
   select(sample, richness, success, failure, desiccation_dynamic, year) |>
   group_by(sample, richness) |>
   nest() |>
   ungroup() |>
-  mutate(model = map(data, ~ glm(cbind(success, failure) ~ desiccation_dynamic + year, 
+  mutate(model = map(data, ~ glm(cbind(success, failure) ~ desiccation_dynamic:year, 
                                  family = binomial(link = "logit"), 
                                  data = .x)),
          summ = map(model, ~ tidy(.x)))
