@@ -1,66 +1,46 @@
 
+## stats ----
 ## load the data
-counts_env <- readRDS("../data/dataDaphnids.rds") # To change
+counts_env <- readRDS("../data/dataDaphnids.rds")
 # variables are: 
 # year: year of sampling
-# sample: spring (1), or summer sample (2)
+# sample: spring or summer sample
 # island: unique island ID
 # pool: unique pool ID
 # cluster: unique cluster ID. A cluster is a collection of pools lying within a given distance from each other
+# d: distance around the pool within which we are counting the number of surrounding pools
 # richness: Daphnia species richness
 # pools_dens: number of pools per running m of a cluster's perimeter
 # desiccation_dynamic: estimates of pool desiccation rate
-# pH: measured pH
+# latitude_corr and longitude_corr: lat and long
+# nr_pools_within: nr of pools within a certain distance d
 
-# Check correlations among potential predictors of richness
-counts_env |> 
-  select(year, sample, pools_dens, desiccation_dynamic, pH) |>
-  cor(use = "pairwise.complete.obs")
-# desiccation_dynamic and year seem to be correlated and 
-# therefore I do not put them in the same model. 
-# It is well known that pools dry more often in recent years,
-# and so I assume that a year effect would mostly be a dryness effect.
-# I further drop pH from the list of predictors because we don't have 
-# pH measurements for 90% of the data. 
-# Finally, I focus on the summer sample because most representative. 
+# Do some plotting: 
+# seems like greater richness at higher nr of surr pools?
+ggplot(counts_env) +
+  theme_bw() +
+  scale_color_viridis_d(option="plasma", end=0.9) +
+  aes(x = nr_pools_within, y = desiccation_dynamic, 
+      col = as.factor(richness)) + 
+  geom_point() + 
+  facet_grid(d~sample, scales = "free", labeller = label_value) +
+  labs(x="nr of surrounding rockpools", y = "desiccation rate", 
+       col="richness")
 
-# Fit the models 
-# Mixed GLM
-model1 <- glmer(richness ~ pools_dens + desiccation_dynamic + (1|cluster),
-                data = counts_env |> filter(sample == 2), 
-                family = poisson(link = "log"))
-summary(model1)
-# Desiccation has positive effect on richness. No effect of pool density
-# But maybe driven by ponds at richness = 3?
-ggplot(counts_env |> filter(sample == 2)) + 
-  aes(y = as.factor(richness), x = desiccation_dynamic) + 
-  geom_boxplot()
+# Regular GLM, pick d and sample
+model <- glm(richness ~ nr_pools_within + desiccation_dynamic, 
+             data = counts_env |> filter(sample == "summer", d == 0.001, richness >0), 
+             family = poisson(link = "log"))
+summary(model)
 
-# Regular GLM
-model2 <- glm(richness ~ pools_dens + desiccation_dynamic, 
-              data = counts_env |> filter(sample == 2), 
-              family = poisson(link = "log"))
-summary(model2)
-# Results are different: now pools density has positive effect, 
-# while desiccation has negative effect. Trends look dodgy though, 
-# and seem to be driven by data at richness = 2
-ggplot(counts_env |> filter(sample == 2)) + 
-  aes(y = as.factor(richness), x = pools_dens) + 
-  geom_boxplot()
-
-# Problem might be that there are only 31 observations with 
-# richness = 3 (out of the 30000). 
-# What happens if we remove these ponds? 
-# Mixed GLM
-model1 <- glmer(richness ~ pools_dens + desiccation_dynamic + (1|cluster),
-                data = counts_env |> filter(sample == 2, richness < 3), 
-                family = poisson(link = "log"))
-summary(model1)
-# Same result as before
-
-# Regular GLM
-model2 <- glm(richness ~ pools_dens + desiccation_dynamic, 
-              data = counts_env |> filter(sample == 2, richness < 3), 
-              family = poisson(link = "log"))
-summary(model2)
-# Same result as before
+# Inspect residuals: probably spatial autocorrelation? 
+counts_env |>
+  mutate(pred = predict(model, newdata = counts_env, type = "response"),
+         res = (pred - richness)^2) |>
+  remove_missing() |>
+  ggplot() +
+  theme_bw() +
+  scale_color_viridis_c(option="plasma", end=0.9) +
+  aes(x = latitude_corr, y = longitude_corr, color = log10(res)) +
+  geom_point() +
+  facet_grid(.~sample, scales = "free", labeller = label_value)

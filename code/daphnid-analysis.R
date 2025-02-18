@@ -63,7 +63,7 @@ counts_env <- counts |>
 
 ## save the data for olivia
 counts_env |> 
-  select(year, sample, island, pool, cluster, 
+  select(year, sample, island, pool, cluster, d, 
          richness, pools_dens, desiccation_dynamic, 
          latitude_corr, longitude_corr, nr_pools_within) |>
   saveRDS("../data/dataDaphnids.rds")
@@ -87,26 +87,28 @@ counts_env <- readRDS("../data/dataDaphnids.rds")
 # island: unique island ID
 # pool: unique pool ID
 # cluster: unique cluster ID. A cluster is a collection of pools lying within a given distance from each other
+# d: distance around the pool within which we are counting the number of surrounding pools
 # richness: Daphnia species richness
 # pools_dens: number of pools per running m of a cluster's perimeter
 # desiccation_dynamic: estimates of pool desiccation rate
 # latitude_corr and longitude_corr: lat and long
-# nr_pools_within: nr of pools within a certain distance
+# nr_pools_within: nr of pools within a certain distance d
 
 # Regular GLM
-model <- glm(richness ~ nr_pools_within*sample + desiccation_dynamic*sample, 
-             data = counts_env |> filter(d == 0.001, richness >0), 
+model <- glm(richness ~ nr_pools_within + desiccation_dynamic, 
+             data = counts_env |> filter(sample == "summer", d == 0.001, richness >0), 
              family = poisson(link = "log"))
 summary(model)
 
-# Inspect residuals
+# Inspect residuals: probably spatial autocorrelation? 
 counts_env |>
   mutate(pred = predict(model, newdata = counts_env, type = "response"),
          res = (pred - richness)^2) |>
+  remove_missing() |>
   ggplot() +
-  aes(x = latitude_corr, y = longitude_corr, col = res) +
+  aes(x = latitude_corr, y = longitude_corr, colour = log10(res)) +
   geom_point() +
-  facet_grid(.~sample, scales = "free", labeller = label_both)
+  facet_grid(.~sample, scales = "free", labeller = label_value)
 
 # LEFTOVERS ----------
 
