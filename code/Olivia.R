@@ -27,9 +27,9 @@ ggplot(counts_env) +
   labs(x="nr of surrounding rockpools", y = "desiccation rate", 
        col="richness")
 
-# Regular GLM, pick d and sample
+# Regular GLM
 model <- glm(richness ~ nr_pools_within + desiccation_dynamic, 
-             data = counts_env |> filter(sample == "summer", d == 0.001, richness >0), 
+             data = counts_env |> filter(sample == "summer", d == 0.001), 
              family = poisson(link = "log"))
 summary(model)
 
@@ -39,8 +39,6 @@ counts_env |>
          res = (pred - richness)^2) |>
   remove_missing() |>
   ggplot() +
-  theme_bw() +
-  scale_color_viridis_c(option="plasma", end=0.9) +
-  aes(x = latitude_corr, y = longitude_corr, color = log10(res)) +
+  aes(x = latitude_corr, y = longitude_corr, colour = log10(res)) +
   geom_point() +
   facet_grid(.~sample, scales = "free", labeller = label_value)

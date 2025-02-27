@@ -1,9 +1,12 @@
 
 library(tidyverse)
 library(broom)
-library(lme4)
+library(lme4) # Mixed models
+library(gstat) # variogram
+library(sp) # coordinates
+library(DHARMa) # glmer residuals check
 
-# READ DATA ----
+# READ AND TREAT DATA ----
 cluster_measures <- read_csv("../data/Ebert/Frederik_data1/Island_measures_vers4.csv") |>
   mutate(cluster = factor(group_100)) |>
   mutate(nr_pools = sum(number_pools_approx),
@@ -21,8 +24,8 @@ pools <- read_csv("../data/Ebert/Frederik_data1/Pools_coordinates_2017_vers7.csv
   group_by(cluster) |>
   nest() |>
   mutate(distances = map(data, ~ tidy(dist(.x |> select(latitude_corr, longitude_corr), upper = T)))) |>
-  expand_grid(d = c(0.0001, 0.0005, 0.001, 0.002)) |>
-  # nr of pools within 0.001 distance
+  expand_grid(d = c(1e-5, 1e-4, 0.0005, 0.001, 0.002)) |>
+  # nr of pools within distance d
   mutate(nr_pools_within = map2(distances, d, ~ .x |> 
                                  summarise(nr = sum((distance < .y)), .by = c(item1)))) |>
   # glue these results to the data
@@ -57,58 +60,79 @@ counts_env <- counts |>
   #add desiccation data
   left_join(desiccation, by = join_by(cluster, year_lag == year)) |>
   #remove na-s
-  filter(!is.na(richness)) |>
-  mutate(sample = if_else(sample == 1, "spring", "summer")) |> 
-  filter(richness >0)
+  remove_missing() |>
+  mutate(sample = if_else(sample == 1, "spring", "summer"),
+         monos = as.factor(if_else(richness==1, "present", "absent")),
+         pairs = as.factor(if_else(richness==2, "present", "absent")),
+         triplets = as.factor(if_else(richness==3, "present", "absent"))) |>
+  filter(richness > 0, richness < 3) 
+# rationale: study probability to observe 
+# pairs vs monocultures,
+# in pools that are viable. 
+# triplets are extremely rare: 84 out of 135948 records
 
-## save the data for olivia
-counts_env |> 
-  select(year, sample, island, pool, cluster, d, 
-         richness, pools_dens, desiccation_dynamic, 
-         latitude_corr, longitude_corr, nr_pools_within) |>
-  saveRDS("../data/dataDaphnids.rds")
-
+# PLOT DATA ------
 ggplot(counts_env) +
   theme_bw() +
-  scale_color_viridis_d(option="plasma", end=0.9) +
-  aes(x = nr_pools_within, y = desiccation_dynamic, 
-      col = as.factor(richness)) + 
-  geom_point() + 
-  facet_grid(d~sample, scales = "free", labeller = label_value) +
-  labs(x="nr of surrounding rockpools", y = "desiccation rate", 
-       col="richness")
+  #scale_color_viridis_c(option="plasma", end=0.9) +
+  aes(x = nr_pools_within) + 
+  geom_histogram() + 
+  labs(x="nr of surrounding rockpools") +
+  facet_grid(d~sample, labeller = label_both)
+
+# Species pairs seem more prevalent in pools that are well surrounded
+# No effect of desiccation visible
+ggplot(counts_env) +
+  theme_bw() +
+  #scale_color_viridis_c(option="plasma", end=0.9) +
+  aes(x = (nr_pools_within), 
+      y = pairs) + 
+  geom_boxplot() + 
+  labs(x="nr of surrounding rockpools", 
+       y = "species pairs") +
+  facet_grid(d~sample, labeller = label_both)
 
 ## stats ----
-## load the data
-counts_env <- readRDS("../data/dataDaphnids.rds")
-# variables are: 
-# year: year of sampling
-# sample: spring or summer sample
-# island: unique island ID
-# pool: unique pool ID
-# cluster: unique cluster ID. A cluster is a collection of pools lying within a given distance from each other
-# d: distance around the pool within which we are counting the number of surrounding pools
-# richness: Daphnia species richness
-# pools_dens: number of pools per running m of a cluster's perimeter
-# desiccation_dynamic: estimates of pool desiccation rate
-# latitude_corr and longitude_corr: lat and long
-# nr_pools_within: nr of pools within a certain distance d
+# Fit models ----
+counts_env_models <- counts_env |>
+  filter(d>1e-5) |> #useless to try and fit this one
+  group_by(sample, d) |>
+  nest() |>
+  mutate(model1 = map(data, ~ glmer(pairs ~ nr_pools_within + desiccation_dynamic +
+                                      (1|island) + (1|year), data = .x, 
+                                    family = binomial(link = "logit"))),
+         model2 = map(data, ~ glmer(pairs ~ nr_pools_within + desiccation_dynamic +
+                                      (1|island/pool) + (1|year), data = .x, 
+                                    family = binomial(link = "logit"))),
+         model_selection = map2(model1, model2, ~ tidy(anova(.x, .y, test = "Chisq"))),#, # model2 always better
+         coefficients = map(model2, ~ coefficients(.x)))
+         #dispersion = map(model2, ~ testDispersion(.x, plot = F)),
+         #residuals = map(model2, ~ simulateResiduals(.x, use.u = T, plot = F))) #|> 
 
-# Regular GLM
-model <- glm(richness ~ nr_pools_within + desiccation_dynamic, 
-             data = counts_env |> filter(sample == "summer", d == 0.001, richness >0), 
-             family = poisson(link = "log"))
+# Test residuals for some combo of d and sample
+selected_model <- counts_env_models |> 
+  filter(sample == "summer", 
+         d == 1e-3) |> #1e-4, 5e-4, 1e-3, 2e-3
+  ungroup() 
+
+model <- selected_model$model2[[1]]
+data <- selected_model$data[[1]]
+testDispersion(model) 
+sim <- simulateResiduals(fittedModel = model, 
+                         plot = F, use.u = T)
+plot(sim) 
+plotResiduals(sim, data$year)
+plotResiduals(sim, data$desiccation_dynamic)
+plotResiduals(sim, data$nr_pools_within)
+plotResiduals(sim, data$island)
+
+data_sp <- data
+coordinates(data) <- ~ latitude_corr + longitude_corr  # Define spatial coordinates
+data$res <- residuals(sim)
+variog <- variogram(res ~ 1, data)
+plot(variog) #ok
+
 summary(model)
-
-# Inspect residuals: probably spatial autocorrelation? 
-counts_env |>
-  mutate(pred = predict(model, newdata = counts_env, type = "response"),
-         res = (pred - richness)^2) |>
-  remove_missing() |>
-  ggplot() +
-  aes(x = latitude_corr, y = longitude_corr, colour = log10(res)) +
-  geom_point() +
-  facet_grid(.~sample, scales = "free", labeller = label_value)
 
 # LEFTOVERS ----------
 
