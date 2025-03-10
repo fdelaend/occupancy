@@ -29,7 +29,23 @@ pools <- read_csv("../data/Ebert/Frederik_data1/Pools_coordinates_2017_vers7.csv
   mutate(nr_pools_within = map2(distances, d, ~ .x |> 
                                  summarise(nr = sum((distance < .y)), .by = c(item1)))) |>
   # glue these results to the data
-  mutate(data = map2(data, nr_pools_within, ~ .x |> mutate(nr_pools_within = .y$nr))) |>
+  mutate(data = map2(data, nr_pools_within, ~ .x |> mutate(nr_pools_within = .y$nr))) 
+
+pools |> 
+  select(cluster, distances) |>
+  unnest(distances) |>
+  ggplot() + 
+  theme_bw() +
+  scale_color_viridis_d(option="plasma", end=0.9) +
+  aes(x = log10(distance), col = cluster) + 
+  geom_density() +
+  labs(x="pairwise distance", 
+       y = "estimated density")
+  
+ggsave(filename = "../figures/distances.pdf", 
+       width=4, height = 3, device = "pdf")
+
+pools <- pools |>
   select(cluster, d, data) |>
   unnest(data)
 
@@ -71,29 +87,7 @@ counts_env <- counts |>
 # in pools that are viable. 
 # triplets are extremely rare: 84 out of 135948 records
 
-# PLOT DATA ------
-ggplot(counts_env) +
-  theme_bw() +
-  #scale_color_viridis_c(option="plasma", end=0.9) +
-  aes(x = nr_pools_within) + 
-  geom_histogram() + 
-  labs(x="nr of surrounding rockpools") +
-  facet_grid(d~sample, labeller = label_both)
-
-# Species pairs seem more prevalent in pools that are well surrounded
-# No effect of desiccation visible
-ggplot(counts_env) +
-  theme_bw() +
-  #scale_color_viridis_c(option="plasma", end=0.9) +
-  aes(x = (nr_pools_within), 
-      y = pairs) + 
-  geom_boxplot() + 
-  labs(x="nr of surrounding rockpools", 
-       y = "species pairs") +
-  facet_grid(d~sample, labeller = label_both)
-
 ## stats ----
-# Fit models ----
 counts_env_models <- counts_env |>
   filter(d>1e-5) |> #useless to try and fit this one
   group_by(sample, d) |>
@@ -104,6 +98,8 @@ counts_env_models <- counts_env |>
          model2 = map(data, ~ glmer(pairs ~ nr_pools_within + desiccation_dynamic +
                                       (1|island/pool) + (1|year), data = .x, 
                                     family = binomial(link = "logit"))),
+         model3 = map(data, ~ glm(pairs ~ nr_pools_within, data = .x, 
+                                    family = binomial(link = "logit"))),
          model_selection = map2(model1, model2, ~ tidy(anova(.x, .y, test = "Chisq"))),#, # model2 always better
          coefficients = map(model2, ~ coefficients(.x)))
          #dispersion = map(model2, ~ testDispersion(.x, plot = F)),
@@ -112,7 +108,7 @@ counts_env_models <- counts_env |>
 # Test residuals for some combo of d and sample
 selected_model <- counts_env_models |> 
   filter(sample == "summer", 
-         d == 1e-3) |> #1e-4, 5e-4, 1e-3, 2e-3
+         d == 5e-4) |> #1e-4, 5e-4, 1e-3, 2e-3
   ungroup() 
 
 model <- selected_model$model2[[1]]
@@ -134,127 +130,42 @@ plot(variog) #ok
 
 summary(model)
 
-# LEFTOVERS ----------
+##plot ----
+counts_env_plot <- counts_env_models |>
+  mutate(data = map2(data, model3, ~ .x |> 
+                       mutate(preds = predict(.y, type="response")))) |>
+  select(!contains("model") & !coefficients) |>
+  unnest(data) |>
+  ungroup() |>
+  summarise(prop = mean(pairs=="present"),
+            pred = mean(preds),
+            pred_sd = sd(preds),
+            p = mean(nr_pools_within),
+            desiccation_dynamic = mean(desiccation_dynamic),
+            .by = c(year, sample, cluster, d))
 
-# Result 1: effect of mean desiccation: more single sp patches, fewer pairs, a bit more triplets
-# Result 2: effect of nr of patches: fewer single sp patches 
-# Interpretation: 
-  # Homogeneity of environmental conditions? Or pH, conductivity, plants not most important? Heterogeneity similar across all clusters
-  # Regional dominant? Not supported by the model? Pulex (and sometimes longi) according to the data?
-
-
-# Hard to see so check out the slopes of fraction vs. predictor (p or desiccation)
-slopes <- test |>
-  filter(richness < 3) |>
-  nest_by(sample, richness, year) %>%
-  expand_grid(predictor = c("p", "desiccation_static_mean_mean")) %>%
-  #mutate(n = map_dbl(data, ~ nrow(.x |> remove_missing()))) |>
-  #filter(n > 0) |>
-  mutate(formula = map(predictor, ~paste("fraction~",.x))) %>%
-  mutate(slope = map2_dbl(data, formula, ~lm(data=.x, formula=as.formula(.y))$coefficients[[2]]))
-
-ggplot(slopes) + 
+ggplot(counts_env_plot) +
   theme_bw() +
-  aes(x=as.factor(richness), y=slope) + 
+  scale_color_viridis_d(option="plasma", end=0.9) +
+  aes(x = p, y = prop, 
+      col = as.factor(year)) +
+  geom_point(show.legend = FALSE) + 
+  geom_line(aes(x = p, y = pred), col = "black", show.legend = FALSE) +
+  labs(x="nr of surrounding rockpools", 
+       y = "proportion of pools with pairs") +
+  facet_grid(d~sample, labeller = label_both) 
+
+ggsave(filename = "../figures/glm.pdf", 
+       width=5, height = 5, device = "pdf")
+
+#leftovers
+# PLOT DATA ------
+ggplot(counts_env) +
+  theme_bw() +
+  #scale_color_viridis_c(option="plasma", end=0.9) +
+  aes(x = (nr_pools_within), 
+      y = pairs) + 
   geom_boxplot() + 
-  facet_grid(predictor~sample, scales = "free", labeller = label_both) +
-  geom_hline(yintercept = 0) +
-  labs(x = "richness", y = "effect")
-# ggsave("../figures/slope.pdf", width=6, height=4)
-
-#visualize conductivity across systems; can do the same for pH
-pH_conductivity |> 
-  left_join(pools, by = join_by(island, pool)) |>
-  filter(!is.na(latitude_corr)) |> #issue with island name resulting in coordinate not found
-  ggplot() + 
-  scale_color_viridis_c(option="plasma", end=0.9) +
-  scale_shape_manual(values = c(1:7)) +
-  aes(x=latitude_corr, y=longitude_corr, col=log_conduct, 
-      pch=cluster) + 
-  geom_point() 
-
-#Now for plant cover
-plant_cover |>
-  left_join(pools, by = join_by(island, pool)) |>
-  filter(!is.na(latitude_corr)) |> #issue with island name resulting in coordinate not found
-  ggplot() + 
-  scale_color_viridis_c(option="plasma", end=0.9) +
-  scale_shape_manual(values = c(1:7)) +
-  aes(x=latitude_corr, y=longitude_corr, col=plants, 
-      pch=cluster) + 
-  geom_point() 
-
-# compute heterogenity
-heterogeneity <- pH_conductivity |>
-  #add cluster ID
-  left_join(island_measures, by = join_by(island)) |>
-  # environmental heterogeneity across pools within a cluster
-  summarize(heterogeneity = sqrt(1/n()*sum((pH-mean(pH, na.rm=T))^2+
-                                             (log_conduct-mean(log_conduct, na.rm=T))^2, na.rm=T)), 
-            .by = cluster) |>
-  remove_missing() |>
-  mutate(heterogeneity_cut = factor(if_else(heterogeneity>1, "high", "low")))
-
-plant_cover <- read_csv("../data/Ebert/Frederik_data1/plantcover_2013_2017.csv") |>
-  remove_missing() |>
-  # normalise across whole data set
-  summarize(plants = mean(plants_rank), 
-            .by = c("island", "pool")) |>
-  mutate(plants = (plants-mean(plants))/sd(plants))
-#plant data only for two years, also made temporal mean 
-
-pH_conductivity <- read_csv("../data/Ebert/Frederik_data1/MetapopData_pH_conductivity_1998_2017.csv") |>
-  # compute mean data across sampling occasions for every pool 
-  summarize(pH = mean(pH, na.rm = T), 
-            log_conduct = mean(log10(conduct_uS), na.rm = T), 
-            .by = c("island", "pool")) |>
-  # normalise across whole data set
-  mutate(pH = (pH-mean(pH, na.rm = T))/sd(pH, na.rm = T),
-         log_conduct = (log_conduct-mean(log_conduct, na.rm = T))/sd(log_conduct, na.rm = T)) 
-
-#location of pools
-pools           <- read_csv("../data/Ebert/Frederik_data1/Pools_coordinates_2017_vers7.csv") |>
-  left_join(island_measures, by="island") |>
-  select(island, pool, latitude_corr, longitude_corr, 
-         cluster, number_pools_approx, island_perimeter_meter, pools_dens) 
-
-# Fit the models 
-# Resample 10 pools per cluster
-resampled_data <- counts_env |> 
-  group_by(cluster, year) |>
-  nest() |>
-  expand_grid(iteration = c(1:100)) |>
-  mutate(data_sample = map(data, ~ .x[sample(1:nrow(.x), 12),])) |>
-  select(!data) |>
-  unnest(data_sample) |>
-  group_by(iteration) |>
-  nest() |>
-  mutate(model = map(data, ~ tidy(glm(richness ~ pools_dens + desiccation_dynamic, 
-                                      data = .x, 
-                                      family = poisson(link = "log"))))) |>
-  select(!data) |>
-  unnest(model) |>
-  filter(term != "(Intercept)")
-
-ggplot(resampled_data) +
-  aes(col = term, y = estimate) +
-  geom_density()
-
-#environmental variables
-pH_conductivity <- read_csv("../data/Ebert/Frederik_data1/MetapopData_pH_conductivity_1998_2017.csv") |>
-  # compute mean data across sampling occasions for every pool 
-  summarize(pH = log10(mean(10^pH, na.rm = T)), 
-            log_conduct = mean(log10(conduct_uS), na.rm = T), 
-            .by = c("year", "island", "pool"))
-
-# Check correlations among potential predictors of richness
-counts_env |> 
-  select(year, sample, nr_pools_within, desiccation_dynamic) |>
-  cor(use = "pairwise.complete.obs")
-# desiccation_dynamic and year seem to be correlated and 
-# therefore I do not put them in the same model. 
-# It is well known that pools dry more often in recent years,
-# and so I assume that a year effect would mostly be a dryness effect.
-# I further drop pH from the list of predictors because we don't have 
-# pH measurements for 90% of the data. 
-# Finally, I focus on the summer sample because most representative. 
+  labs(x="nr of surrounding rockpools", 
+       y = "species pairs") +
+  facet_grid(d~sample, labeller = label_both)
