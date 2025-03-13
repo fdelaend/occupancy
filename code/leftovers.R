@@ -122,3 +122,15 @@ counts_env |>
 # I further drop pH from the list of predictors because we don't have 
 # pH measurements for 90% of the data. 
 # Finally, I focus on the summer sample because most representative. 
+
+
+# PLOT DATA 
+ggplot(counts_env) +
+  theme_bw() +
+  #scale_color_viridis_c(option="plasma", end=0.9) +
+  aes(x = (nr_pools_within), 
+      y = pairs) + 
+  geom_boxplot() + 
+  labs(x="nr of surrounding rockpools", 
+       y = "species pairs") +
+  facet_grid(b~sample, labeller = label_both)
