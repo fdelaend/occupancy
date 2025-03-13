@@ -1,6 +1,7 @@
 
 library(tidyverse)
-library(broom)
+library(xtable)
+library(broom.mixed)
 library(lme4) # Mixed models
 library(gstat) # variogram
 library(sp) # coordinates
@@ -160,7 +161,15 @@ for (i in 1:nrow(counts_env_models)) {
   dev.off()
 }
 
-summary(model)
+###estimated effects of final models ----
+counts_env_models |>
+  select(!data & !model1 & !model3 & !model_selection) |>
+  mutate(results = map(model2, ~ tidy(.x))) |>
+  select(!model2) |>
+  unnest(results) |>
+  as.data.frame() |>
+  xtable() |>
+  print(type = "latex")
 
 ##plot ----
 counts_env_plot <- counts_env_models |>
