@@ -2,8 +2,8 @@
 # Illustration of what happens when dispersal is large
 
 Sims <- expand_grid(n = c(6), meanA = c(0.6), #, 6; 0.4, 0.4, 0.6, 
-                    d = seq(-3,0, length.out=5), vary=0, k=c(1, 1.5),
-                    cvA = 0.2, p = c(10, 20, 30, 40, 50), rep = 1) |> #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
+                    d = seq(0,2, length.out=4), vary=0, k=c(1),
+                    cvA = 0, p = c(10, 50), rep = c(1:10)) |> #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
   #Make parameters: d, sdA
   mutate(d = 10^d,
          sdA = cvA * meanA) |>
@@ -42,7 +42,14 @@ Sims <- expand_grid(n = c(6), meanA = c(0.6), #, 6; 0.4, 0.4, 0.6,
   select(!A & !N0) #ditch all unneeded data
 
 ggplot(Sims) + 
-  aes(x=p, y=log10(d), col=propPatchesN)+
-  geom_point() +
-  facet_grid(k~.)
+  theme_bw() +
+  theme(panel.grid = element_blank()) +
+  scale_fill_viridis_c(option="plasma", end=0.9) +
+  aes(x=log10(d), y=p, fill=propPatchesN)+
+  geom_point(pch = 21, cex=2) +
+  labs(x=expression(paste("dispersal rate, log"[10],"(d)")), 
+       y="nr. of patches, p", fill="patch occupancy")
+
+saveRDS(Sims, file=paste("../simulated-data/high_D_data.RDS",sep=""))
+
   

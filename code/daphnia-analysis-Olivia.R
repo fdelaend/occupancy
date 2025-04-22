@@ -7,73 +7,7 @@ library(gstat) # variogram
 library(sp) # coordinates
 library(DHARMa) # glmer residuals check
 
-# READ AND TREAT DATA ----
-cluster_measures <- read_csv("../data/Ebert/Frederik_data1/Island_measures_vers4.csv") |>
-  mutate(cluster = factor(group_100)) |>
-  select(cluster, island) 
-
-pools <- read_csv("../data/Ebert/Frederik_data1/Pools_coordinates_2017_vers7.csv") |>
-  filter(!grepl("A", pool), !grepl("A", name)) |> #island present twice in the data
-  select(island, pool, latitude_corr, longitude_corr) |>
-  left_join(cluster_measures |> select(cluster, island), 
-            by = "island") |>
-  group_by(cluster) |>
-  nest() |>
-  mutate(distances = map(data, ~ tidy(dist(.x |> select(latitude_corr, longitude_corr), upper = T)))) |>
-  expand_grid(b = c(1e-5, 1e-4, 0.0005, 0.001, 0.002)) |>
-  # nr of pools within distance b
-  mutate(nr_pools_within = map2(distances, b, ~ .x |> 
-                                 summarise(nr = sum((distance < .y)), .by = c(item1)))) |>
-  # glue these results to the data
-  mutate(data = map2(data, nr_pools_within, ~ .x |> mutate(nr_pools_within = .y$nr))) 
-
-pools |> 
-  select(cluster, distances) |>
-  unnest(distances) |>
-  ggplot() + 
-  theme_bw() +
-  scale_color_viridis_d(option="plasma", end=0.9) +
-  aes(x = log10(distance), col = cluster) + 
-  geom_density() +
-  labs(x="log10(pairwise distance)", 
-       y = "estimated density")
-  
-ggsave(filename = "../figures/distances.pdf", 
-       width=4, height = 3, device = "pdf")
-
-pools <- pools |>
-  select(cluster, b, data) |>
-  unnest(data)
-
-counts          <- read_csv("../data/Ebert/Frederik_data1/Daphnia_dynamics_1982_2017_2.csv") |>
-  filter(!grepl("A", pool), !grepl("A", poolname)) |> #islands present twice in the data
-  remove_missing() |>
-  left_join(cluster_measures, by = join_by(island)) |>
-  left_join(pools, by = join_by(cluster, island, pool), 
-            relationship = "many-to-many")
-
-desiccation        <- read_csv("../data/Ebert/Frederik_data1/Data_hydroperiod_Means.csv") |>
-  expand_grid(year = c(min(counts$year):max(counts$year))) |>
-  left_join(read_csv("../data/Ebert/hydro.csv"), 
-            by = join_by(poolname == pool, year)) |> 
-  separate_wider_delim(poolname, delim = "-", names = c("island", "pool")) |>
-  left_join(cluster_measures, by="island") |>
-  summarise(desiccation_dynamic  = mean(predicted_desiccation_events, na.rm = T),
-            .by = c(year, cluster))
-
-# add environmental data to count data
-counts_env <- counts |>
-  mutate(richness = magna + longispina + pulex) |>
-  #lag one year to join with correct desiccation data in next step
-  mutate(year_lag = year - 1) |>
-  #add desiccation data
-  left_join(desiccation, by = join_by(cluster, year_lag == year)) |>
-  #remove na-s
-  remove_missing() |>
-  mutate(sample = if_else(sample == 1, "spring", "summer"),
-         monos = as.factor(if_else(richness==1, "present", "absent")),
-         pairs = as.factor(if_else(richness==2, "present", "absent")),
-         triplets = as.factor(if_else(richness==3, "present", "absent"))) 
+readRDS("Data.rds")
 
 ## stats ----
 # rationale: study probability to observe 
@@ -98,11 +32,11 @@ counts_env_models <- counts_env |>
                                     family = binomial(link = "logit"))),
          # Simplified model used for plotting
          model3 = map(data, ~ glm(pairs ~ nr_pools_within, data = .x, 
-                                    family = binomial(link = "logit"))),
+                                  family = binomial(link = "logit"))),
          model_selection = map2(model1, model2, ~ tidy(anova(.x, .y, test = "Chisq"))))#, # model2 always better
-         #coefficients = map(model2, ~ coefficients(.x)))
-         #dispersion = map(model2, ~ testDispersion(.x, plot = F)),
-         #residuals = map(model2, ~ simulateResiduals(.x, use.u = T, plot = F))) #|> 
+#coefficients = map(model2, ~ coefficients(.x)))
+#dispersion = map(model2, ~ testDispersion(.x, plot = F)),
+#residuals = map(model2, ~ simulateResiduals(.x, use.u = T, plot = F))) #|> 
 
 ###Model selection table and dispersal test model 2----
 counts_env_models |>
@@ -190,7 +124,6 @@ counts_env_plot <- counts_env_models |>
             pred = mean(preds),
             pred_sd = sd(preds),
             p = mean(nr_pools_within),
-            n = length(nr_pools_within), # Weight for the logistic regression on proportions
             desiccation_dynamic = mean(desiccation_dynamic),
             .by = c(year, sample, cluster, b))
 
@@ -198,27 +131,15 @@ ggplot(counts_env_plot) +
   theme_bw() +
   scale_color_viridis_d(option="plasma", end=0.9) +
   aes(x = p, y = prop, 
-      col = as.factor(b),
-      weight = n) + # Weight for the logistic regression on proportions
-  geom_point(alpha = 0.2, show.legend = FALSE) + 
-  geom_point(shape = 1, alpha = 0.5, show.legend = FALSE) + 
-  geom_smooth(aes(group = as.factor(b)), # White border to highlight lines
-              method = "glm", 
-              method.args = list(family = binomial(link = "logit")),
-              se = F, 
-              color = "white", 
-              lwd = 1.4,
-              lineend='round') +  # Round edge of lines
-  geom_smooth(method = "glm", 
-              method.args = list(family = binomial(link = "logit")),
-              se = F,
-              lineend='round',
-              lwd = 0.8) +
-  labs(x="mean nr of pools within distance, by cluster", 
-       y = "proportion of cluster pools with pairs", 
+      col = as.factor(b)) +
+  geom_point(alpha = 0.5, show.legend = FALSE) + 
+  geom_line(aes(x = p, y = pred, 
+                col = as.factor(b)),
+            lwd = 1.2) +
+  labs(x="mean nr of surrounding rockpools within distance", 
+       y = "proportion of pools with pairs", 
        col = "distance") +
   facet_grid(.~sample, labeller = label_both) 
 
 ggsave(filename = "../figures/glm.pdf", 
        width=5, height = 3, device = "pdf")
-

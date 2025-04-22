@@ -59,7 +59,7 @@ NtotalK <- ggplot(Predictions_NK |>
   theme(panel.grid = element_blank()) +
   scale_fill_viridis_c(option="plasma", end=0.9) +
   geom_tile(aes(x=meanA, fill=log10(meanNTotalKPredicted), 
-                y=p)) +
+                y=p), colour = NA) +
   labs(x="interaction strength, a", y = "nr of patches, p", 
        fill=expression(paste("log"[10],"(", Sigma[{k}],"N"[{"0,i"}]^{(k)}, ")"))) +
   theme(legend.position="bottom")
@@ -120,7 +120,7 @@ probExc <- ggplot(Predictions |>
   theme(panel.grid = element_blank()) +
   scale_fill_viridis_c(option="plasma", end=0.9) +
   aes(x=log10(d), y=p, fill=probExc) + 
-  geom_tile() +
+  geom_tile(color = NA) +
   #geom_point() +
   labs(x=expression(paste("dispersal rate, log"[10],"(d)")), 
        fill=expression(paste("P(N"[i],">0 | N"["0i"],"=0)")),
@@ -200,23 +200,34 @@ ggplot(SimsSum |> filter(dispType == "exponentialD",
 ggsave(paste0("../figures/patch-occupancy-not-met.pdf"), 
        width=8, height = 4, device = "pdf")  
 
-# Leftovers -----
-## showcase accuracy of mean r -----
-ggplot(IntPredSimple %>% mutate(meanA2 = meanA) %>%
-         unite("it", rep, meanA2)) + 
-  theme_bw() +
-  scale_linetype_manual(values=rep("solid", 1000)) + 
-  scale_color_viridis_c(option="plasma", end=0.9) +
-  geom_point(aes(x=m, y=meanRPer, col=meanA, pch=as.factor(k)), alpha=0.5) + 
-  aes(x=m, y=meanRPerPredicted, col=meanA, lty=as_factor(it)) + #,,  
-  geom_line(show.legend = F) + 
-  facet_grid(cols=vars(cvA), rows=vars(vary), labeller = label_both) +
-  labs(x="nr of persisting species, m", 
-       y="mean r of persisting species", 
-       col="a", pch="k (equivalence)")
+# showcase accuracy of mean r -----
 
-ggsave(paste0("../figures/rm.pdf"), width=6, height = 3, 
+Mean_predictions <- Predictions_NK |>
+  filter(p==50, meanA %in% c(0.2, 0.5)) |>
+  summarise(pred = mean(meanRPerPredicted, na.rm=T),
+            .by = c(m, meanA))
+
+Sims |> 
+  filter(dispType == "regularD", meanA < 1, d==10^-6, 
+         k==1, cvA==0, vary==0, p==50) |>
+  select(meanA, summaryM) |>
+  unnest(summaryM) |>
+  mutate(m = as.numeric(as.character(m))) |>
+  ggplot() + 
+  theme_bw() +
+  scale_colour_viridis_d(option="plasma", end=0.9) +
+  aes(x = m, y = meanRPer, col = as.factor(meanA)) + 
+  geom_point() + 
+  geom_line(data = Mean_predictions, 
+             aes(x = m, y = pred, col = as.factor(meanA))) + 
+  labs(x = "nr of persisting species, m", 
+       y = "mean growth rate", 
+       col = "a")
+
+ggsave(paste0("../figures/rm.pdf"), width=4, height = 3, 
        device = "pdf")
+
+# Leftovers -----
 #good prediction, except when m<=2 and a is strong. 
 #Changing the uniform approximation to a triangular one
 #does not seem to improve things (but double-check). So I suspect there is something 
