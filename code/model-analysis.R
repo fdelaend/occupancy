@@ -132,7 +132,7 @@ probExc <- ggplot(Predictions |>
 case1 <- (NtotalK | NegIGR) / probExc + plot_annotation(tag_levels = "A") 
 
 ggsave(paste0("../figures/case1.pdf"), case1, 
-       width=5, height = 7.5, device = "pdf")  
+       width=4.2, height = 6.3, device = "pdf")  
 
 ## Plot Case 2
 probPer <- ggplot(Predictions |> 
@@ -161,12 +161,12 @@ SimsSum <- Sims |>
   summarise(meanProb = mean(propPatchesN, na.rm = T), 
             sdProb = sd(propPatchesN, na.rm = T), 
             .by = c(n, meanA, d, vary, k, cvA, p, dispType)) |>
-  mutate(k = if_else(k==1, "Regional equivalence", "Regional dominance"))
+  mutate(k = if_else(k==1, "Equivalence", "No equivalence"))
 
 #Plot for when all assumptions are met, but allowing d to be large
 ggplot(SimsSum |>
          filter(dispType == "regularD", meanA < 1, 
-                k=="Regional equivalence", cvA==0, vary==0)) + 
+                k=="Equivalence", cvA==0, vary==0)) + 
   theme_bw() +
   theme(panel.grid = element_blank()) +
   scale_fill_viridis_c(option="plasma", end=0.9) +
@@ -180,14 +180,14 @@ ggplot(SimsSum |>
        y="nr. of patches, p", fill="patch occupancy")
 
 ggsave(paste0("../figures/patch-occupancy-met.pdf"), 
-       width=5, height = 2, device = "pdf")  
+       width=4.5, height = 2, device = "pdf")  
 
 #Plot for when not met
 ggplot(SimsSum |> filter(dispType == "exponentialD", 
                          vary > 0, cvA == 0.2)) + 
   theme_bw() +
   theme(panel.grid = element_blank(), 
-        panel.background = element_rect("lightgrey")) +
+        panel.background = element_rect(colour = "snow2")) +
   scale_fill_viridis_c(option="plasma", end=0.9) +
   geom_point(aes(x=log10(d), y=p, fill=meanProb), col = "black", 
              pch = 21, cex=2) +
@@ -198,7 +198,7 @@ ggplot(SimsSum |> filter(dispType == "exponentialD",
        y = "nr of patches, p", fill= "patch occupancy")
 
 ggsave(paste0("../figures/patch-occupancy-not-met.pdf"), 
-       width=8, height = 4, device = "pdf")  
+       width=5, height = 2.5, device = "pdf")  
 
 # showcase accuracy of mean r -----
 
