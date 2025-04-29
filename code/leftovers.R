@@ -134,3 +134,18 @@ ggplot(counts_env) +
   labs(x="nr of surrounding rockpools", 
        y = "species pairs") +
   facet_grid(b~sample, labeller = label_both)
+
+
+pools |> 
+  select(cluster, distances) |>
+  unnest(distances) |>
+  ggplot() + 
+  theme_bw() +
+  scale_color_viridis_d(option="plasma", end=0.9) +
+  aes(x = log10(distance), col = cluster) + 
+  geom_density() +
+  labs(x="log10(pairwise distance)", 
+       y = "estimated density")
+
+ggsave(filename = "../figures/distances.pdf", 
+       width=4, height = 3, device = "pdf")

@@ -166,11 +166,13 @@ SimsSum <- Sims |>
 #Plot for when all assumptions are met, but allowing d to be large
 ggplot(SimsSum |>
          filter(dispType == "regularD", meanA < 1, 
+                d < 2e-3, d > 1e-5, 
                 k=="Equivalence", cvA==0, vary==0)) + 
   theme_bw() +
   theme(panel.grid = element_blank()) +
   scale_fill_viridis_c(option="plasma", end=0.9) +
-  geom_tile(data=Predictions |> filter(meanA %in% c(0.2, 0.5), p <= 51), 
+  geom_tile(data=Predictions |> filter(meanA %in% c(0.2, 0.5), 
+                                       d < 2e-3, d > 1e-5, p <= 51), 
               aes(x=log10(d), y=p, fill = prob2), show.legend = F) +
   geom_point(aes(x=log10(d), y=p, fill=meanProb), col = "white", 
              pch = 21, cex=2) +
@@ -179,7 +181,7 @@ ggplot(SimsSum |>
   labs(x=expression(paste("dispersal rate, log"[10],"(d)")), 
        y="nr. of patches, p", fill="patch occupancy")
 
-ggsave(paste0("../figures/patch-occupancy-met.pdf"), 
+ggsave(paste0("../figures/patch-occupancy-met-talk.pdf"), 
        width=4.5, height = 2, device = "pdf")  
 
 #Plot for when not met

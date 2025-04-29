@@ -4,6 +4,7 @@ library(xtable)
 library(broom.mixed)
 library(lme4) # Mixed models
 library(gstat) # variogram
+library(geodist) #distance calculation
 library(sp) # coordinates
 library(DHARMa) # glmer residuals check
 
@@ -19,27 +20,12 @@ pools <- read_csv("../data/Ebert/Frederik_data1/Pools_coordinates_2017_vers7.csv
             by = "island") |>
   group_by(cluster) |>
   nest() |>
-  mutate(distances = map(data, ~ tidy(dist(.x |> select(latitude_corr, longitude_corr), upper = T)))) |>
-  expand_grid(b = c(1e-5, 1e-4, 0.0005, 0.001, 0.002)) |>
+  mutate(distances = map(data, ~ geodist(.x |> select(latitude_corr, longitude_corr)))) |>
+  expand_grid(b = c(10, 50, 100, 200)) |>
   # nr of pools within distance b
-  mutate(nr_pools_within = map2(distances, b, ~ .x |> 
-                                 summarise(nr = sum((distance < .y)), .by = c(item1)))) |>
+  mutate(nr_pools_within = map2(distances, b, ~ rowSums(.x < .y)-1)) |>
   # glue these results to the data
-  mutate(data = map2(data, nr_pools_within, ~ .x |> mutate(nr_pools_within = .y$nr))) 
-
-pools |> 
-  select(cluster, distances) |>
-  unnest(distances) |>
-  ggplot() + 
-  theme_bw() +
-  scale_color_viridis_d(option="plasma", end=0.9) +
-  aes(x = log10(distance), col = cluster) + 
-  geom_density() +
-  labs(x="log10(pairwise distance)", 
-       y = "estimated density")
-  
-ggsave(filename = "../figures/distances.pdf", 
-       width=4, height = 3, device = "pdf")
+  mutate(data = map2(data, nr_pools_within, ~ .x |> mutate(nr_pools_within = .y))) 
 
 pools <- pools |>
   select(cluster, b, data) |>
@@ -61,8 +47,8 @@ desiccation        <- read_csv("../data/Ebert/Frederik_data1/Data_hydroperiod_Me
   summarise(desiccation_dynamic  = mean(predicted_desiccation_events, na.rm = T),
             .by = c(year, cluster))
 
-# add environmental data to count data
-counts_env <- counts |>
+# add desiccation data to count data
+counts_des <- counts |>
   mutate(richness = magna + longispina + pulex) |>
   #lag one year to join with correct desiccation data in next step
   mutate(year_lag = year - 1) |>
@@ -80,14 +66,13 @@ counts_env <- counts |>
 # pairs vs monocultures,
 # in pools that are viable. 
 # Remove triplets bc extremely rare: 21 out of 6297 occurrences of non-empty pools (0.33%):
-counts_env |>
-  filter(b == 1e-5, richness == 3) |> #richness == 3, or >0
+counts_des |>
+  filter(b == 10, richness == 3) |> #richness == 3, or >0
   nrow()
 
 # Fit glmer for different values of b
-counts_env_models <- counts_env |>
+counts_des_models <- counts_des |>
   filter(richness > 0, richness < 3) |>
-  filter(b > 1e-5) |> #useless to try and fit this one
   group_by(sample, b) |>
   nest() |>
   mutate(model1 = map(data, ~ glmer(pairs ~ nr_pools_within + desiccation_dynamic +
@@ -105,7 +90,7 @@ counts_env_models <- counts_env |>
          #residuals = map(model2, ~ simulateResiduals(.x, use.u = T, plot = F))) #|> 
 
 ###Model selection table and dispersal test model 2----
-counts_env_models |>
+counts_des_models |>
   ungroup() |>
   #do dispersal test of model 2
   mutate(`p, disp.` = map(model2, ~ testDispersion(.x, plot = F)$p.value)) |>
@@ -126,9 +111,9 @@ counts_env_models |>
 
 ###Residual analysis ----
 
-for (i in 1:nrow(counts_env_models)) {
-  model <- counts_env_models$model2[[i]]
-  data <- counts_env_models$data[[i]] |>
+for (i in 1:nrow(counts_des_models)) {
+  model <- counts_des_models$model2[[i]]
+  data <- counts_des_models$data[[i]] |>
     rename(desiccation = desiccation_dynamic,
            `nr of pools` = nr_pools_within)
   
@@ -161,7 +146,7 @@ for (i in 1:nrow(counts_env_models)) {
 }
 
 ###estimated effects of final models ----
-counts_env_models |>
+counts_des_models |>
   ungroup() |>
   select(!data & !model1 & !model3 & !model_selection) |>
   mutate(results = map(model2, ~ tidy(.x))) |>
@@ -180,7 +165,7 @@ counts_env_models |>
         include.rownames = FALSE)
 
 ##plot ----
-counts_env_plot <- counts_env_models |>
+counts_des_plot <- counts_des_models |>
   mutate(data = map2(data, model3, ~ .x |> 
                        mutate(preds = predict(.y, type="response")))) |>
   select(!contains("model")) |>
@@ -194,8 +179,9 @@ counts_env_plot <- counts_env_models |>
             desiccation_dynamic = mean(desiccation_dynamic),
             .by = c(year, sample, cluster, b))
 
-ggplot(counts_env_plot) +
+ggplot(counts_des_plot |> filter(b == 100)) +
   theme_bw() +
+  scale_x_reverse() + #for talk
   scale_color_viridis_d(option="plasma", end=0.9) +
   aes(x = p, y = prop, 
       col = as.factor(b),
@@ -216,9 +202,10 @@ ggplot(counts_env_plot) +
               lwd = 0.8) +
   labs(x="mean nr of pools within distance, by cluster", 
        y = "proportion of cluster pools with pairs", 
-       col = "distance") +
+       col = "distance (m)") +
   facet_grid(.~sample, labeller = label_both) 
 
-ggsave(filename = "../figures/glm.pdf", 
+ggsave(filename = "../figures/glm-talk.pdf", 
        width=5, height = 3, device = "pdf")
+
 
