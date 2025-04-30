@@ -8,14 +8,17 @@ library(geodist) #distance calculation
 library(sp) # coordinates
 library(DHARMa) # glmer residuals check
 
-# READ AND TREAT DATA ----
-cluster_measures <- read_csv("../data/Ebert/Frederik_data1/Island_measures_vers4.csv") |>
+# Read and organise data ----
+
+# Link between cluster and island
+cluster_measures <- read_csv("../daphnid-data/island-measures.csv") |>
   mutate(cluster = factor(group_100)) |>
   select(cluster, island) 
 
-pools <- read_csv("../data/Ebert/Frederik_data1/Pools_coordinates_2017_vers7.csv") |>
+# Coordinates of pools and computation of nr of pools within a distance "b"
+pool_coords <- read_csv("../daphnid-data/pool-coords.csv") |>
   filter(!grepl("A", pool), !grepl("A", name)) |> #island present twice in the data
-  select(island, pool, latitude_corr, longitude_corr) |>
+  select(island, pool, name, latitude_corr, longitude_corr) |>
   left_join(cluster_measures |> select(cluster, island), 
             by = "island") |>
   group_by(cluster) |>
@@ -27,22 +30,24 @@ pools <- read_csv("../data/Ebert/Frederik_data1/Pools_coordinates_2017_vers7.csv
   # glue these results to the data
   mutate(data = map2(data, nr_pools_within, ~ .x |> mutate(nr_pools_within = .y))) 
 
-pools <- pools |>
+pool_coords <- pool_coords |>
   select(cluster, b, data) |>
   unnest(data)
 
-counts          <- read_csv("../data/Ebert/Frederik_data1/Daphnia_dynamics_1982_2017_2.csv") |>
+# Read Daphnid data and join cluster ID and nr of pools within "b"
+counts          <- read_csv("../daphnid-data/daphnid-counts.csv") |>
   filter(!grepl("A", pool), !grepl("A", poolname)) |> #islands present twice in the data
   remove_missing() |>
   left_join(cluster_measures, by = join_by(island)) |>
-  left_join(pools, by = join_by(cluster, island, pool), 
+  left_join(pool_coords, by = join_by(cluster, island, pool), 
             relationship = "many-to-many")
 
-desiccation        <- read_csv("../data/Ebert/Frederik_data1/Data_hydroperiod_Means.csv") |>
+# Read desiccation data
+desiccation        <- tibble(name = unique(pool_coords$name)) |>
   expand_grid(year = c(min(counts$year):max(counts$year))) |>
-  left_join(read_csv("../data/Ebert/hydro.csv"), 
-            by = join_by(poolname == pool, year)) |> 
-  separate_wider_delim(poolname, delim = "-", names = c("island", "pool")) |>
+  left_join(read_csv("../daphnid-data/desiccation.csv"), 
+            by = join_by(name == pool, year)) |> 
+  separate_wider_delim(name, delim = "-", names = c("island", "pool")) |>
   left_join(cluster_measures, by="island") |>
   summarise(desiccation_dynamic  = mean(predicted_desiccation_events, na.rm = T),
             .by = c(year, cluster))
@@ -61,10 +66,7 @@ counts_des <- counts |>
          pairs = as.factor(if_else(richness==2, "present", "absent")),
          triplets = as.factor(if_else(richness==3, "present", "absent"))) 
 
-## stats ----
-# rationale: study probability to observe 
-# pairs vs monocultures,
-# in pools that are viable. 
+# Statistics ----
 # Remove triplets bc extremely rare: 21 out of 6297 occurrences of non-empty pools (0.33%):
 counts_des |>
   filter(b == 10, richness == 3) |> #richness == 3, or >0
@@ -89,7 +91,7 @@ counts_des_models <- counts_des |>
          #dispersion = map(model2, ~ testDispersion(.x, plot = F)),
          #residuals = map(model2, ~ simulateResiduals(.x, use.u = T, plot = F))) #|> 
 
-###Model selection table and dispersal test model 2----
+## Model selection table and dispersal test model 2----
 counts_des_models |>
   ungroup() |>
   #do dispersal test of model 2
@@ -109,7 +111,7 @@ counts_des_models |>
         scientific = TRUE,
         include.rownames = FALSE)
 
-###Residual analysis ----
+## Residual analysis ----
 
 for (i in 1:nrow(counts_des_models)) {
   model <- counts_des_models$model2[[i]]
@@ -145,7 +147,7 @@ for (i in 1:nrow(counts_des_models)) {
   dev.off()
 }
 
-###estimated effects of final models ----
+## Estimated effects of final models ----
 counts_des_models |>
   ungroup() |>
   select(!data & !model1 & !model3 & !model_selection) |>
@@ -164,7 +166,7 @@ counts_des_models |>
         scientific = TRUE,
         include.rownames = FALSE)
 
-##plot ----
+## Plot ----
 counts_des_plot <- counts_des_models |>
   mutate(data = map2(data, model3, ~ .x |> 
                        mutate(preds = predict(.y, type="response")))) |>
@@ -179,9 +181,8 @@ counts_des_plot <- counts_des_models |>
             desiccation_dynamic = mean(desiccation_dynamic),
             .by = c(year, sample, cluster, b))
 
-ggplot(counts_des_plot |> filter(b == 100)) +
+ggplot(counts_des_plot) +
   theme_bw() +
-  scale_x_reverse() + #for talk
   scale_color_viridis_d(option="plasma", end=0.9) +
   aes(x = p, y = prop, 
       col = as.factor(b),
@@ -205,7 +206,7 @@ ggplot(counts_des_plot |> filter(b == 100)) +
        col = "distance (m)") +
   facet_grid(.~sample, labeller = label_both) 
 
-ggsave(filename = "../figures/glm-talk.pdf", 
+ggsave(filename = "../figures/glm.pdf", 
        width=5, height = 3, device = "pdf")
 
 
