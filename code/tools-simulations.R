@@ -1,4 +1,5 @@
 library(deSolve)
+library(rootSolve)
 library(tidyverse)
 library(igraph)
 extinctionThreshold <- 1e-3
@@ -7,14 +8,14 @@ extinctionThreshold <- 1e-3
 ## To make all sorts of matrices -------------------------------------
 #Make block diagonal matrix by stacking p times A
 # on the diagonal. The matrix A can be simply perfectly copied (vary=0),
-# or varied to some extend among copies, as quantified by  
+# or varied to some extend among copies, as quantified by
 # "vary" = the width of the uniform (max-min) around the elements of A
 make_block_diagonal <- function(A, p, vary = 0, ...) {
   A_temp <- array(0, dim=dim(A)*p) # all zeros
   for (i in 1:p) {
     A_vary <- array(data = runif(prod(dim(A)), 1 - vary, 1 + vary), dim = dim(A)) #local deviation of A in block i
     A_temp[(ncol(A)*i-ncol(A)+1):(ncol(A)*i), (ncol(A)*i-ncol(A)+1):(ncol(A)*i)] <- A * A_vary
-    }
+  }
   return(A_temp)
 }
 
@@ -27,7 +28,7 @@ set_diagonal <- function(A, d){
 # all diagonal blocks are zero
 # off diagonals blocks are diagonal matrices containing the sp-specific dispersal rates
 # if two sites are connected, they exchange individuals in both directions (but allowing for different rates)
-# d = dispersal rate 
+# d = dispersal rate
 # p = nr of locations
 # n = nr of sp
 # connectivity = *fraction* of all possible combos that are connected
@@ -68,7 +69,7 @@ make_R_spatial <- function(n, p, k=1, negative_sign=10000, ...){
   rawRs <- t(sample_sphere_surface(dim=n, n = p, radius = 1, positive = TRUE))
   #now make sure the mean r across species is 1 at all patches
   rawRs <- rawRs %*% diag(1/colMeans(rawRs))
-  rawRs <- diag(1/rowMeans(rawRs)) %*% rawRs  
+  rawRs <- diag(1/rowMeans(rawRs)) %*% rawRs
   rawRs <- rawRs %*% diag(c(k, rep(1/k, n-1))) # relax regional equivalence: make one species more competitive than expected across all patches
   colnames(rawRs) <- c(1:n)
   #and put everything into a nice format
@@ -179,7 +180,7 @@ dispMatrixCommunityExp <- function(coords, dispDistanceVector) {
     dispMatrixCommunity(coords = coords)
 }
 
-# Function to rescale the created D matrix to fix the mean 
+# Function to rescale the created D matrix to fix the mean
 # dispersal rate. Only makes sense to use for a matrix with distance-based disp. kernel
 # Input:
 # - D: a dispersal matrix with distance-based dispersal kernel
@@ -191,79 +192,86 @@ rescale_D <- function(D, d=0.01) {
 
 ## LV -------------------------------------
 
-#Cut-off function to limit the values of the state to enhance 
+#Cut-off function to limit the values of the state to enhance
 #numerical stability when solving the odes
-cutoff <- function(n, a) {
-  return(1*(n<a)*(3*(n/a)^2-2*(n/a)^3)*ifelse(n<0, 0, 1)+ifelse(n<a, 0, 1))
+cutoff <- function(n) {
+  ifelse(n < 1, (1 * (n > 0)) * (n * n * n * (10 + n * (-15 + 6 * n))), 1)
 }
 
-#the LV model; R= a vector of max. intrinsic growth rates; 
-#A= matrix with linear species interactions, global var 
+#the LV model; R= a vector of max. intrinsic growth rates;
+#A= matrix with linear species interactions, global var
 run_LV <- function(time, state, pars) {
   return(list(as.numeric(
-    ((state*(pars$R+pars$A%*%state)))*cutoff(state, 1e-10)
+    ((state*(pars$R+pars$A%*%state)))*cutoff(state/1e-10)
   )))
 }
 
-#Spatial LV model; R= a vector of max. intrinsic growth rates; 
+#Spatial LV model; R= a vector of max. intrinsic growth rates;
 #A= matrix with linear species interactions, D=dispersal matrix
 run_LV_spatial <- function(time, state, pars) {
-  return(list(as.numeric(
-    ((state*((pars$R-colSums(pars$D))-pars$A%*%state))+pars$D%*%state)*
-      cutoff(state, 1e-10)
-  )))
+  list((state*((pars$R-colSums(pars$D))-drop(pars$A%*%state))) + drop(pars$D%*%state))
 }
+
+Jac_LV_spatial <- function(time, state, pars) {
+  (pars$R-colSums(pars$D) - drop(pars$A %*% state)) * diag(length(pars$R)) -
+    state * pars$A + pars$D
+}
+
 #compute dynamics from spatial LV simulation
 #n = nr of sp
 #R, A, D: as in run_LV_spatial
 #max_time = max simulation time
 #Output: deSolve object
-get_dynamics <- function(n, R, A, D, max_time=200, N0, ...){
+get_dynamics <- function(n, R, A, D, max_time=200, N0, tstep = 10, ...){
   p         <- length(R)/n #infer nr of patches
   names(N0) <- paste(rep(1:n, p), "_", rep(1:p, each=n), sep="")
-  ode(func=run_LV_spatial, y=N0, 
-                   parms=list(R=R, A=A, D=D), 
-                   times=seq(1,max_time,0.1))
+  runsteady(y=N0, func=run_LV_spatial, parms=list(R=R, A=A, D=D),
+            jacfunc=Jac_LV_spatial, mf=21, stol = 1e-12)$y
+  #ode(func=run_LV_spatial, y=N0,
+  #    parms=list(R=R, A=A, D=D),
+  #    times=seq(0, max_time, tstep),
+  #    jacfunc = Jac_LV_spatial)
 }
 
 #Wraps around get_dynamics to get equilibrium
-get_NHat <- function(n, R, A, D, max_time=100, N0, ...){
+get_NHat <- function(n, R, A, D, max_time=200, N0, ...){
   get_dynamics(n=n, R=R, A=A, D=D, max_time=max_time, N0=N0) |>
-    organise_ode() |>
-    filter(time == max_time) |>
-    select(-time)
+    organise_ode() #|>
+    #filter(time == max_time) |>
+    #select(-time)
 }
 
 #re-organises the ode output into a tibble with columns time, sp, location, N (density)
 #dynamics = deSolve object
 organise_ode <- function(dynamics, ...) {
-  dynamics[1:nrow(dynamics), 1:ncol(dynamics)] |>
-    as_tibble() |>
-    pivot_longer(2:ncol(dynamics), names_to = "sp_location", values_to = "N") |>
+  #dynamics[1:nrow(dynamics), 1:ncol(dynamics)] |>
+  #  as_tibble() |>
+  #  pivot_longer(2:ncol(dynamics), names_to = "sp_location", values_to = "N") |>
+  enframe(dynamics, name = "sp_location") |>
     separate_wider_delim(sp_location, delim = "_", names = c("sp", "location")) |>
-    mutate(sp = as.numeric(sp),
-           location = as.numeric(location))
+    mutate(sp = as.integer(sp),
+           location = as.integer(location))
 }
 
 
 #Counts the number of times the past abundance vector comes 'close' to the final one.
-#Inputs: 
+#Inputs:
 #dynamics = output of ode()
 #tolerance = permitted distance between abundance vectors
-#tail_size = nr of timesteps considered (you don't want the initial timepoints) 
+#tail_size = nr of timesteps considered (you don't want the initial timepoints)
 
-#Output interpreted as: 
+#Output interpreted as:
 #0 : fixed point
 #1 : persistent fluctuations (chaos)
 #2,3,4,... : limit cycle, heterclinic cycle, or a switch to/from fp or cycles within the time window
 #Taken from Mallmin et al. 2024 PNAS
-get_limit_index <- function(dynamics, tolerance = 1e-4, 
+get_limit_index <- function(dynamics, tolerance = 1e-4,
                             tail_size,...) {
   mat_x <- tail(dynamics[,-1], tail_size) # matrix of t (nr of timepoints) x S
-  
+
   vec_x <- mat_x[nrow(mat_x), ]
   vec_L <- 2 * (mat_x %*% vec_x) / (sum(vec_x * vec_x) + rowSums(mat_x^2))
   vec_L_sign <- sign(vec_L - (1 - tolerance))
-  
+
   sum(vec_L_sign[-length(vec_L_sign)] * vec_L_sign[-1] < 0)
 }
