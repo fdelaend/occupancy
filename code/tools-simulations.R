@@ -213,22 +213,57 @@ run_LV_spatial <- function(time, state, pars) {
       cutoff(state, 1e-10)
   )))
 }
-#compute NHat from spatial LV simulation
+#compute dynamics from spatial LV simulation
 #n = nr of sp
 #R, A, D: as in run_LV_spatial
 #max_time = max simulation time
-
-get_NHat <- function(n, R, A, D, max_time=100, N0, ...){
+#Output: deSolve object
+get_dynamics <- function(n, R, A, D, max_time=200, N0, ...){
   p         <- length(R)/n #infer nr of patches
-  densities <- ode(func=run_LV_spatial, y=N0, 
+  names(N0) <- paste(rep(1:n, p), "_", rep(1:p, each=n), sep="")
+  ode(func=run_LV_spatial, y=N0, 
                    parms=list(R=R, A=A, D=D), 
                    times=seq(1,max_time,0.1))
-  locations <- NULL; for (i in 1:p) {locations <- c(locations, rep(i, n))}
-  return(as_tibble(cbind(density=tail(densities, 1)[-1], 
-                         location=locations,
-                         sp=rep(c(1:n), p)))) 
+}
+
+#Wraps around get_dynamics to get equilibrium
+get_NHat <- function(n, R, A, D, max_time=100, N0, ...){
+  get_dynamics(n=n, R=R, A=A, D=D, max_time=max_time, N0=N0) |>
+    organise_ode() |>
+    filter(time == max_time) |>
+    select(-time)
+}
+
+#re-organises the ode output into a tibble with columns time, sp, location, N (density)
+#dynamics = deSolve object
+organise_ode <- function(dynamics, ...) {
+  dynamics[1:nrow(dynamics), 1:ncol(dynamics)] |>
+    as_tibble() |>
+    pivot_longer(2:ncol(dynamics), names_to = "sp_location", values_to = "N") |>
+    separate_wider_delim(sp_location, delim = "_", names = c("sp", "location")) |>
+    mutate(sp = as.numeric(sp),
+           location = as.numeric(location))
 }
 
 
+#Counts the number of times the past abundance vector comes 'close' to the final one.
+#Inputs: 
+#dynamics = output of ode()
+#tolerance = permitted distance between abundance vectors
+#tail_size = nr of timesteps considered (you don't want the initial timepoints) 
 
-
+#Output interpreted as: 
+#0 : fixed point
+#1 : persistent fluctuations (chaos)
+#2,3,4,... : limit cycle, heterclinic cycle, or a switch to/from fp or cycles within the time window
+#Taken from Mallmin et al. 2024 PNAS
+get_limit_index <- function(dynamics, tolerance = 1e-4, 
+                            tail_size,...) {
+  mat_x <- tail(dynamics[,-1], tail_size) # matrix of t (nr of timepoints) x S
+  
+  vec_x <- mat_x[nrow(mat_x), ]
+  vec_L <- 2 * (mat_x %*% vec_x) / (sum(vec_x * vec_x) + rowSums(mat_x^2))
+  vec_L_sign <- sign(vec_L - (1 - tolerance))
+  
+  sum(vec_L_sign[-length(vec_L_sign)] * vec_L_sign[-1] < 0)
+}
