@@ -260,6 +260,21 @@ organise_ode <- function(dynamics, ...) {
 #tolerance = permitted distance between abundance vectors
 #tail_size = nr of timesteps considered (you don't want the initial timepoints)
 
+#Summarize output of the spatial LV model
+summarize_ode <- function(NHat, R, n, ...){
+  NHat |>
+  mutate(present = value>extinctionThreshold,
+         R=R) |>
+  summarize(m = as_factor(sum(present)),
+            NTotal = sum(value),
+            meanRPer = sum(R*present)/sum(present),
+            .by = location) |>
+  mutate(m = fct_expand(m, as.character(c(1:n)))) |>
+  group_by(m, .drop=F) |>
+  summarize(nrPatches = n(),#nr of patches with m sp.
+            NTotal = mean(NTotal),#total biomass in a patch with m sp.
+            meanRPer = mean(meanRPer))}
+
 #Output interpreted as:
 #0 : fixed point
 #1 : persistent fluctuations (chaos)

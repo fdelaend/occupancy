@@ -5,8 +5,8 @@ parallel_id <- 1 # Normally you would get this from the cluster: Sys.getenv('SLU
 # SIMULATIONS ----
 ## Simulations ------
 Sims <-
-  expand_grid(n = c(6), meanA = c(0.2, 0.5), #, 6; 0.4, 0.4, 0.6,
-              d = c(seq(-6, -4, length.out=2), seq(-3, -1, length.out=2)),
+  expand_grid(n = c(6), meanA = c(0.2, 0.5, 1), #, 6; 0.4, 0.4, 0.6,
+              d = c(seq(-6, -2, length.out=10)),
               vary=c(0, 0.1), k=c(1, 1.5),
               cvA = c(0, 0.2), p = c(10, 20), rep = parallel_id) |> #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
   #Make parameters: d, sdA
