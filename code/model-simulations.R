@@ -34,8 +34,10 @@ Sims <-
   #Simulate the network
   (\(x) mutate(x, NHat = pmap(x, get_NHat, .progress = TRUE)))()
 
+## Summarize results ----
+
+results <- Sims |>
   #1/ Summarize the simulated data: per m, compute the nr of patches and total biomass of an average patch
-test <- Sims |>
   (\(x) mutate(x, summaryM = pmap(x, summarize_ode)))() |>
   #2/proportion of patches in which all n species persist
   mutate(propPatchesN = 1/p*map2_dbl(summaryM, n, ~ (.x |> filter(m==.y))$nrPatches)) |>
@@ -44,4 +46,8 @@ test <- Sims |>
                          summarize(NTotalK = sum(value), 
                                    .by = sp))) |>
   select(!A & !D & !distances & !N0 & !coords) #ditch all unneeded data
-# To save, pipe result into: write_rds(file=str_c("../simulated-data/",parallel_id,"data.RDS"))
+
+## Save results ----
+write_rds(results, 
+          file=str_c("../simulated-data-rev/", 
+                     parallel_id,"data.RDS"))
