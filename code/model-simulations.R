@@ -8,7 +8,7 @@ Sims <-
   expand_grid(n = c(6), meanA = c(0.2, 0.5, 1), #, 6; 0.4, 0.4, 0.6,
               d = c(seq(-6, -2, length.out=10)),
               vary=c(0, 0.1), k=c(1, 1.5),
-              cvA = c(0, 0.2), p = c(10, 20), rep = parallel_id) |> #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
+              cvA = c(1e-2, 0.2), p = seq(10, 50, 5), rep = parallel_id) |> #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
   #Make parameters: d, sdA
   mutate(d = 10^d,
          sdA = cvA * meanA) |>
@@ -35,25 +35,13 @@ Sims <-
   (\(x) mutate(x, NHat = pmap(x, get_NHat, .progress = TRUE)))()
 
   #1/ Summarize the simulated data: per m, compute the nr of patches and total biomass of an average patch
-Sims %>%
-  mutate(summaryM = pmap(., function(NHat, R, n,...){
-    NHat %>%
-      mutate(present = density>extinctionThreshold,
-             R=R) %>%
-      group_by(location) %>%
-      summarize(m = as_factor(sum(present)),
-                NTotal = sum(density),
-                meanRPer = sum(R*present)/sum(present)) %>%
-      mutate(m = fct_expand(m, as.character(c(1:n)))) %>%
-      group_by(m, .drop=F) %>%
-      summarize(nrPatches = n(),#nr of patches with m sp.
-                NTotal = mean(NTotal),#total biomass in a patch with m sp.
-                meanRPer = mean(meanRPer))})) %>%
+test <- Sims |>
+  (\(x) mutate(x, summaryM = pmap(x, summarize_ode)))() |>
   #2/proportion of patches in which all n species persist
-  mutate(propPatchesN = 1/p*map2_dbl(summaryM, n, ~ (.x %>% filter(m==.y))$nrPatches)) %>%
+  mutate(propPatchesN = 1/p*map2_dbl(summaryM, n, ~ (.x |> filter(m==.y))$nrPatches)) |>
   #3/total density across all patches of a species
-  mutate(NTotalK = map(NHat, ~ .x %>%
-                         group_by(sp) %>%
-                         summarize(NTotalK = sum(density)))) %>%
+  mutate(NTotalK = map(NHat, ~ .x |>
+                         summarize(NTotalK = sum(value), 
+                                   .by = sp))) |>
   select(!A & !D & !distances & !N0 & !coords) #ditch all unneeded data
 # To save, pipe result into: write_rds(file=str_c("../simulated-data/",parallel_id,"data.RDS"))
