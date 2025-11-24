@@ -58,3 +58,8 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+# Outputs
+simulated-data/*.RDS
+
+
