@@ -55,7 +55,7 @@ make_symmetric <- function(A){
 
 #make basic A matrix with diagonal to one
 make_A <- function(meanA=0.6, sdA=0, n=3, ...) {
-  matrix(data = rnorm(n^2, meanA, sdA), ncol = n) |>
+  matrix(data = rnorm(n^2, meanA, sdA), ncol = n) %>%
     set_diagonal(d=1)
 }
 #generates p intrinsic growth rate vectors, stacked underneath each other
@@ -88,7 +88,7 @@ make_R_spatial <- function(n, p, k=1, negative_sign=10000, ...){
 # - An nPatch x dim data frame whose (i,j)th entry is the jth coordinate of patch i.
 #   The rows are unnamed; the columns are named "V1", "V2", ..., "V<dim>".
 make_randomCoords <- function(nPatch, dim = 2) {
-  matrix(runif(nPatch * dim, 0, 1), nrow = nPatch, ncol = dim) |>
+  matrix(runif(nPatch * dim, 0, 1), nrow = nPatch, ncol = dim) %>%
     as.data.frame(row.names = NULL)
 }
 
@@ -102,11 +102,11 @@ make_randomCoords <- function(nPatch, dim = 2) {
 # - A matrix, with diagonal entries zeroed out, where the (i,j)th entry is the
 #   dispersal rate from patch j to patch i.
 dispMatrix <- function(coords, kernel) {
-  coords |> # Start with table of patch coordinates
-    dist() |> # Compute pairwise distances between all possible combinations
-    as.matrix() |> # Convert result from a "dist" object to a regular matrix
-    kernel() |> # Apply the dispersal kernel function to each entry of the matrix
-    unname() |> # Remove unnecessary row and column names from the matrix
+  coords %>% # Start with table of patch coordinates
+    dist() %>% # Compute pairwise distances between all possible combinations
+    as.matrix() %>% # Convert result from a "dist" object to a regular matrix
+    kernel() %>% # Apply the dispersal kernel function to each entry of the matrix
+    unname() %>% # Remove unnecessary row and column names from the matrix
     (`diag<-`)(0) # Set all diagonal entries to 0
 }
 
@@ -155,7 +155,7 @@ oneHotMatrix <- function(dim, n) {
 dispMatrixCommunity <- function(coords, kernelList) {
   S <- length(kernelList) # Number of species
   L <- nrow(coords) # Number of patches
-  dispMatrices <- coords |> dispMatrixList(kernelList) # S matrices in a list, each LxL
+  dispMatrices <- coords %>% dispMatrixList(kernelList) # S matrices in a list, each LxL
   fullDisp <- matrix(0, S*L, S*L) # Initialize full dispersal matrix
   # Add each species' contribution to the expanded dispersal matrix:
   for (i in 1:S) fullDisp <- fullDisp + dispMatrices[[i]] %x% oneHotMatrix(S, i)
@@ -235,7 +235,7 @@ get_dynamics <- function(n, R, A, D, max_time=200, N0, tstep = 10, ...){
 
 #Wraps around get_dynamics to get equilibrium
 get_NHat <- function(n, R, A, D, max_time=200, N0, ...){
-  get_dynamics(n=n, R=R, A=A, D=D, max_time=max_time, N0=N0) |>
+  get_dynamics(n=n, R=R, A=A, D=D, max_time=max_time, N0=N0) %>%
     organise_ode() #|>
     #filter(time == max_time) |>
     #select(-time)
@@ -247,8 +247,8 @@ organise_ode <- function(dynamics, ...) {
   #dynamics[1:nrow(dynamics), 1:ncol(dynamics)] |>
   #  as_tibble() |>
   #  pivot_longer(2:ncol(dynamics), names_to = "sp_location", values_to = "N") |>
-  enframe(dynamics, name = "sp_location") |>
-    separate_wider_delim(sp_location, delim = "_", names = c("sp", "location")) |>
+  enframe(dynamics, name = "sp_location") %>%
+    separate_wider_delim(sp_location, delim = "_", names = c("sp", "location")) %>%
     mutate(sp = as.integer(sp),
            location = as.integer(location))
 }
@@ -262,15 +262,15 @@ organise_ode <- function(dynamics, ...) {
 
 #Summarize output of the spatial LV model
 summarize_ode <- function(NHat, R, n, ...){
-  NHat |>
+  NHat %>%
   mutate(present = value>extinctionThreshold,
-         R=R) |>
+         R=R) %>%
   summarize(m = as_factor(sum(present)),
             NTotal = sum(value),
             meanRPer = sum(R*present)/sum(present),
-            .by = location) |>
-  mutate(m = fct_expand(m, as.character(c(1:n)))) |>
-  group_by(m, .drop=F) |>
+            .by = location) %>%
+  mutate(m = fct_expand(m, as.character(c(1:n)))) %>%
+  group_by(m, .drop=F) %>%
   summarize(nrPatches = n(),#nr of patches with m sp.
             NTotal = mean(NTotal),#total biomass in a patch with m sp.
             meanRPer = mean(meanRPer))}
