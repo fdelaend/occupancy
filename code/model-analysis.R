@@ -3,16 +3,16 @@ source("tools-simulations.R")
 source("tools-other.R")
 
 # Combine all simulation output from cluster into a single object ----
-#Sims <- tibble(filenr = c(1:100)) |>
-#  mutate(data = map(filenr, ~read_rds(paste("../simulated-data/",.x,"data.rds", sep="")))) |>
-#  unnest(data) |>
-#  select(!filenr) |>
-#  mutate(rep = as.numeric(rep))
+Sims <- tibble(filenr = c(1:100)) |>
+  mutate(data = map(filenr, ~read_rds(paste("../simulated-data/simulated-data-2/",.x,"data.rds", sep="")))) |>
+  unnest(data) |>
+  select(!filenr) |>
+  mutate(rep = as.numeric(rep))
 # Save the object
-#saveRDS(Sims, file=paste("../simulated-data/all-data.RDS",sep=""))
+saveRDS(Sims, file=paste("../simulated-data/simulated-data-2/all-data.RDS",sep=""))
 
 # Or read it if already done ----
-Sims <- readRDS(file="../simulated-data/all-data.RDS")
+#Sims <- readRDS(file="../simulated-data/simulated-data-2/all-data.RDS")
 
 # Recover the distribution of the growth rates --------
 Rs     <- Sims |> 
