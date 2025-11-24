@@ -1,7 +1,6 @@
 library(deSolve)
 library(rootSolve)
 library(tidyverse)
-library(igraph)
 extinctionThreshold <- 1e-3
 
 # Functions ------------------------------------------------------------
@@ -58,25 +57,23 @@ make_A <- function(meanA=0.6, sdA=0, n=3, ...) {
   matrix(data = rnorm(n^2, meanA, sdA), ncol = n) %>%
     set_diagonal(d=1)
 }
+
 #generates p intrinsic growth rate vectors, stacked underneath each other
 #for use in spatial LV simulations
-#negative_sign is a vector telling which species needs to have a negative intrinsic growth rate
-#example: c(2,3) is the case where the intrinsic growth rate of sp 2 and 3 carry a negative sign
-#If you want none to have a negative r, just go negative_sign= some i>n
 #n is nr of species, p is nr of patches, k is fold increase of the strongest species' growth rate
-make_R_spatial <- function(n, p, k=1, negative_sign=10000, ...){
+make_R_spatial <- function(n, p, k=1, ...){
   #sample from a sphere to get the directions right
-  rawRs <- t(sample_sphere_surface(dim=n, n = p, radius = 1, positive = TRUE))
+  rawRs <- abs(matrix(rnorm(p * n), nrow = p))
+  rawRs <- t(rawRs / sqrt(rowSums(rawRs^2)))
   #now make sure the mean r across species is 1 at all patches
   rawRs <- rawRs %*% diag(1/colMeans(rawRs))
-  rawRs <- diag(1/rowMeans(rawRs)) %*% rawRs
-  rawRs <- rawRs %*% diag(c(k, rep(1/k, n-1))) # relax regional equivalence: make one species more competitive than expected across all patches
+  #relax regional equivalence: make one species more competitive than expected across all patches
+  rawRs <- t(rawRs) %*% diag(c(k, rep(1/k, n-1))) 
   colnames(rawRs) <- c(1:n)
   #and put everything into a nice format
   Rs     <- as_tibble(rawRs)%>%
     mutate(location=c(1:p)) %>%
-    pivot_longer(!location) %>%
-    mutate(value=value*(-1)*name%in%negative_sign + value*(1-name%in%negative_sign))
+    pivot_longer(!location) 
   return(Rs$value)
 }
 
