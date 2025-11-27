@@ -68,7 +68,7 @@ make_R_spatial <- function(n, p, k=1, ...){
   #aim for a mean of 1 across species for each patch 
   #...and across patches for each species
   #...by iterative scaling
-  for (iteration in c(1:6)){
+  for (iteration in c(1:2)){
     rawRs <- rawRs %*% diag(1/colMeans(rawRs))
     rawRs <- diag(1/rowMeans(rawRs)) %*% rawRs
   }
