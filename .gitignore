@@ -8,6 +8,7 @@
 /mathematica/teo/*.*
 /data/
 /simulated-data/
+!/simulated-data/.gitkeep
 
 # History files
 .Rhistory
