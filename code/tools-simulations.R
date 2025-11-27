@@ -65,8 +65,13 @@ make_R_spatial <- function(n, p, k=1, ...){
   #sample from a sphere to get the directions right
   rawRs <- abs(matrix(rnorm(p * n), nrow = p))
   rawRs <- t(rawRs / sqrt(rowSums(rawRs^2)))
-  #now make sure the mean r across species is 1 at all patches
-  rawRs <- rawRs %*% diag(1/colMeans(rawRs))
+  #aim for a mean of 1 across species for each patch 
+  #...and across patches for each species
+  #...by iterative scaling
+  for (iteration in c(1:6)){
+    rawRs <- rawRs %*% diag(1/colMeans(rawRs))
+    rawRs <- diag(1/rowMeans(rawRs)) %*% rawRs
+  }
   #relax regional equivalence: make one species more competitive than expected across all patches
   rawRs <- t(rawRs) %*% diag(c(k, rep(1/k, n-1))) 
   colnames(rawRs) <- c(1:n)

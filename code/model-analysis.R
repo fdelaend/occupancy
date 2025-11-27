@@ -12,12 +12,12 @@ Sims <- tibble(filenr = c(1:100)) |>
 saveRDS(Sims, file=paste("../simulated-data/simulated-data-2/all-data.RDS",sep=""))
 
 # Or read it if already done ----
-#Sims <- readRDS(file="../simulated-data/simulated-data-2/all-data.RDS")
+Sims <- readRDS(file="../simulated-data/simulated-data-2/all-data.RDS")
 
 # Recover the distribution of the growth rates --------
 Rs     <- Sims |> 
   #Only keep a factorial combo, since the same Rs are being sampled everywhere
-  filter(meanA==0.5, d==min(d), vary==0, k==1, cvA==0, p==50, 
+  filter(meanA==0.5, d==min(d), vary==0, k==1, cvA==1e-2, p==50, 
          rep==1) |> 
   select(R) |>
   unnest(R)
@@ -37,7 +37,7 @@ meanR  <- sum(pdfRs$x*pdfRs$y)/sum(pdfRs$y)#grant mean of R
 #            .by = c(n, m, meanA))
 
 # Or read it if already done ----
-Predictions_fm <- readRDS(file="../simulated-data/Predictions_fm.RDS")
+Predictions_fm <- readRDS(file="../simulated-data/simulated-data-1/Predictions_fm.RDS")
   
 # Predict regional total of density of a species (eq.13 in SI) for diffuse competition ----
 Predictions_NK <- Predictions_fm |> 
@@ -75,13 +75,13 @@ Predictions <- Predictions_NK |>
   filter(meanA > 0) |> #Otherwise error when computing sample_ri
   nest_by(n, meanA, p, NTotalKPredicted) |>
   ungroup() |>
-  mutate(sampleSize = 10) |> #set sample size for probability calculations. Size=1000 used for manuscript.
+  mutate(sampleSize = 100) |> #set sample size for probability calculations. 
   (\(x) mutate(x, samples = pmap(x, sample_random)))() |>
   mutate(samples = map(samples, ~ .x |>  
                        mutate(meanN1Exc=mean(N1iExc, na.rm=T), #mean across patches of Ni1 in case of exclusion w/o dispersal. Because we sample 1 species per patch, this is the same as taking a mean across species
                               meanrho = mean(rhoi, na.rm=T), #same type of mean, but now of rhoi
                               .by = m))) |>  
-  expand_grid(d = seq(-6,-0, length.out=10)) |> #Create a gradient of dispersal values. Used a value of 50 for the paper
+  expand_grid(d = seq(-6,-2, length.out=20)) |> #Create a gradient of dispersal values. 
   mutate(d=10^d) |>
   (\(x) mutate(x, samples = pmap(x, sample_random_Ni)))() |> #Sample random values for Ni (density of i with dispersal)
   mutate(probExc = map_dbl(samples, ~sum(.x$NiExc>extinctionThreshold)/length(.x$NiExc)), #Compute probabilities that > threshold
@@ -167,13 +167,13 @@ SimsSum <- Sims |>
 #Plot for when all assumptions are met, but allowing d to be large -----
 ggplot(SimsSum |>
          filter(dispType == "regularD", meanA < 1, 
-                d < 2e-3, d > 1e-5, 
-                k=="Equivalence", cvA==0, vary==0)) + 
+                d < 1e-2, 
+                k=="Equivalence", cvA==0.01, vary==0)) + 
   theme_bw() +
   theme(panel.grid = element_blank()) +
   scale_fill_viridis_c(option="plasma", end=0.9) +
   geom_tile(data=Predictions |> filter(meanA %in% c(0.2, 0.5), 
-                                       d < 2e-3, d > 1e-5, p <= 51), 
+                                       p <= 51), 
               aes(x=log10(d), y=p, fill = prob2), show.legend = F) +
   geom_point(aes(x=log10(d), y=p, fill=meanProb), col = "white", 
              pch = 21, cex=2) +
