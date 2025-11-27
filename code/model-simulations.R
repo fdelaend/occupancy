@@ -49,5 +49,5 @@ results <- Sims %>%
 
 ## Save results ----
 write_rds(results, 
-          file=str_c("../simulated-data-2/", 
+          file=str_c("../simulated-data/simulated-data-2/", 
                      parallel_id,"data.RDS"))
