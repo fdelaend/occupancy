@@ -26,18 +26,21 @@ meanR  <- sum(pdfRs$x*pdfRs$y)/sum(pdfRs$y)#grant mean of R
 
 
 # Predict f(m) (eq.14 in SI) for diffuse competition ----
-# Predictions_fm <- expand_grid(n = 6, m = c(1:6), iteration = c(1:10),
-#                   meanA = seq(0.05, 0.8, 0.05)) |>
-#  mutate(meanA = if_else(meanA==1, meanA+1e-5, meanA)) |> #Avoid matrices with det()=0
-#  (\(x) mutate(x, fmPredicted = pmap_dbl(x, get_fraction_m)))() |>
-#  fm isn't calculated correctly for m = 1, so get it here as 1 - sum of fm for 2 to 6
-#  mutate(fmPredicted = if_else(m==1, abs(1-sum(fmPredicted, na.rm=T)), fmPredicted),
-#         .by = c(n, meanA, iteration))  |>
-#  summarise(fmPredicted = mean(fmPredicted), 
-#            .by = c(n, m, meanA))
+ Predictions_fm <- expand_grid(n = 10, m = c(1:10), 
+                               iteration = c(1:10),
+                               meanA = seq(0.1, 0.8, 0.05)) |>
+  mutate(meanA = if_else(meanA==1, meanA+1e-5, meanA)) |> #Avoid matrices with det()=0
+  (\(x) mutate(x, fmPredicted = pmap_dbl(x, get_fraction_m)))() |>
+  #fm isn't calculated correctly for m = 1, so get it here as 1 - sum of fm for 2 to 6
+  mutate(fmPredicted = if_else(m==1, abs(1-sum(fmPredicted, na.rm=T)), fmPredicted),
+         .by = c(n, meanA, iteration))  |>
+  summarise(fmPredicted = mean(fmPredicted), 
+            .by = c(n, m, meanA))
+# Save the object
+saveRDS(Predictions_fm, file=paste("../simulated-data/simulated-data-2/Predictions_fm.RDS",sep=""))
 
 # Or read it if already done ----
-Predictions_fm <- readRDS(file="../simulated-data/simulated-data-1/Predictions_fm.RDS")
+Predictions_fm <- readRDS(file="../simulated-data/simulated-data-2/Predictions_fm.RDS")
   
 # Predict regional total of density of a species (eq.13 in SI) for diffuse competition ----
 Predictions_NK <- Predictions_fm |> 
@@ -176,7 +179,7 @@ ggplot(SimsSum |>
                                        p <= 51), 
               aes(x=log10(d), y=p, fill = prob2), show.legend = F) +
   geom_point(aes(x=log10(d), y=p, fill=meanProb), col = "white", 
-             pch = 21, cex=2) +
+             shape = 22, cex=2) +
   facet_grid(.~meanA, 
              labeller = label_bquote(cols=paste("a = ", .(meanA)))) +
   labs(x=expression(paste("dispersal rate, log"[10],"(d)")), 
@@ -193,7 +196,7 @@ ggplot(SimsSum |> filter(dispType == "exponentialD",
         panel.background = element_rect(colour = "snow2")) +
   scale_fill_viridis_c(option="plasma", end=0.9) +
   geom_point(aes(x=log10(d), y=p, fill=meanProb), col = "black", 
-             pch = 21, cex=2) +
+             pch = 22, cex=2) +
 #  geom_tile(aes(x=log10(d), y=p, fill = meanProb)) +#, pch = 21, cex=3
   facet_grid(k~meanA, 
              labeller = label_bquote(cols = paste(bar(a), " = ", .(meanA)))) +
@@ -211,7 +214,7 @@ Mean_predictions <- Predictions_NK |>
 
 Sims |> 
   filter(dispType == "regularD", meanA < 1, d==10^-6, 
-         k==1, cvA==0, vary==0, p==50) |>
+         k==1, cvA==0.01, vary==0, p==50) |>
   select(meanA, summaryM) |>
   unnest(summaryM) |>
   mutate(m = as.numeric(as.character(m))) |>
@@ -226,5 +229,5 @@ Sims |>
        y = "mean growth rate", 
        col = "a")
 
-#ggsave(paste0("../figures/rm.pdf"), width=4, height = 3, 
-#       device = "pdf")
+ggsave(paste0("../figures/rm.pdf"), width=4, height = 3, 
+       device = "pdf")
