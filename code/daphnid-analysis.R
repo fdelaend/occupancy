@@ -209,4 +209,71 @@ ggplot(counts_des_plot) +
 ggsave(filename = "../figures/glm.pdf", 
        width=5, height = 3, device = "pdf")
 
+## Fit glmer for one Daphnid species ------
+counts_des_models <- counts_des |>
+  filter(richness > 0, richness < 3, b == 100) |>
+  select(year, sample, island, poolname, magna, longispina, pulex, 
+         nr_pools_within, desiccation_dynamic) |>
+  pivot_wider(names_from = sample, 
+              values_from = c(magna, longispina, pulex)) |>
+  remove_missing() 
+
+model_magna <- glmer(magna_summer ~ magna_spring + longispina_spring + pulex_spring +
+                       nr_pools_within + desiccation_dynamic + (1|island/poolname) + (1|year), 
+               data = counts_des_models, 
+               family = binomial(link = "logit"))
+
+model_longispina <- glmer(longispina_summer ~ magna_spring + longispina_spring + pulex_spring +
+                       desiccation_dynamic + (1|island/poolname) + (1|year), 
+                     data = counts_des_models, 
+                     family = binomial(link = "logit"))
+
+# Including nr_pools_within: failed convergence
+summary(model_longispina)
+
+counts_des |>
+  filter(richness > 0, richness < 3, b == 100) |>
+  mutate(isolation = if_else(nr_pools_within>50, "more surrounded", "less surrounded"),
+         desicc = if_else(desiccation_dynamic>1, "high desiccation", "low desiccation")) |>
+  select(year, sample, island, poolname, magna, longispina, pulex,
+         isolation, desicc) |>
+  pivot_longer(cols = c(magna, longispina, pulex), names_to = "sp",
+               values_to = "presence") |>
+  pivot_wider(names_from = sample, 
+              values_from = presence) |>
+  remove_missing() |>
+  summarise(
+    summer_presence = mean(summer),
+    summer_presence_sd = sd(summer),
+    n = n(),
+    .by = c(sp, spring, year, isolation, desicc)) |>
+  ggplot() + 
+  theme_bw() +
+  aes(x = factor(spring), y = summer_presence,
+      ymin = summer_presence - summer_presence_sd,
+      ymax = summer_presence + summer_presence_sd,
+      shape = factor(sp),
+      group = factor(sp),
+      col = year) +
+  #geom_errorbar(width = 0.2, position = position_dodge(width = 1)) +
+  geom_point(position = position_dodge(width = 1)) +
+  #geom_text(aes(y = summer_presence + summer_presence_sd, 
+  #              label = paste0(n)), vjust = -0.5,
+  #          position = position_dodge(width = 1), 
+  #          show.legend = F) +
+  facet_grid(isolation ~ desicc) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.5), 
+                     limits = c(0, 1)) +
+  labs(x = "presence in spring", y = "P(presence in summer)", 
+         shape = "species")
+  
+ggsave(filename = "../figures/priority.pdf", 
+       width=5, height = 3, device = "pdf")
+
+  
+
+  
+
+
+
 

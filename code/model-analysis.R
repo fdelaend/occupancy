@@ -26,7 +26,7 @@ meanR  <- sum(pdfRs$x*pdfRs$y)/sum(pdfRs$y)#grant mean of R
 
 
 # Predict f(m) (eq.14 in SI) for diffuse competition ----
- Predictions_fm <- expand_grid(n = 10, m = c(1:10), 
+Predictions_fm <- expand_grid(n = 10, m = c(1:10), 
                                iteration = c(1:10),
                                meanA = seq(0.1, 0.8, 0.05)) |>
   mutate(meanA = if_else(meanA==1, meanA+1e-5, meanA)) |> #Avoid matrices with det()=0
@@ -65,7 +65,7 @@ NtotalK <- ggplot(Predictions_NK |>
   theme(panel.grid = element_blank()) +
   scale_fill_viridis_c(option="plasma", end=0.9) +
   geom_tile(aes(x=meanA, fill=log10(meanNTotalKPredicted), 
-                y=p), colour = NA) +
+                y=p), colour = "NA") +
   labs(x="interaction strength, a", y = "nr of patches, p", 
        fill=expression(paste("log"[10],"(", Sigma[{k}],"N"[{"0,i"}]^{(k)}, ")"))) +
   theme(legend.position="bottom")
@@ -94,6 +94,10 @@ Predictions <- Predictions_NK |>
   (\(x) mutate(x, prob2 = pmap_dbl(x, get_patch_occupancy)))() |>
   select(!data & !A)
 
+saveRDS(Predictions, file="../simulated-data/simulated-data-2/Predictions.RDS")
+#Or read it if already done ----
+Predictions <- readRDS(file="../simulated-data/simulated-data-2/Predictions.RDS")
+
 # Plot this probability ----
 probExc <- ggplot(Predictions |> 
                     filter(meanA %in% c(0.2, 0.5), log10(d) < -4)) + 
@@ -115,9 +119,6 @@ Predictions_IGR <- Predictions |>
   filter(d==min(d), p == 100) |>
   select(all_of(c("meanA", "samples", "p"))) |>
   unnest(samples)
-#Or read it if already done ----
-#Predictions <- readRDS(file="../simulated-data/Predictions.RDS")
-#Predictions_IGR <- readRDS(file="../simulated-data/Predictions_IGR.RDS")
 
 # Illustrate predictions of negative invasion growth rate ----
 NegIGR <- Predictions_IGR |> 
@@ -134,8 +135,8 @@ NegIGR <- Predictions_IGR |>
 # Recreate Fig 1 ----
 case1 <- (NtotalK | NegIGR) / probExc + plot_annotation(tag_levels = "A") 
 
-#ggsave(paste0("../figures/case1.pdf"), case1, 
-#       width=4.2, height = 6.3, device = "pdf")  
+ggsave(paste0("../figures/case1.pdf"), case1, 
+       width=4.2, height = 6.3, device = "pdf")  
 
 # Evidence that persistence with disperal is almost guaranteed ----
 # when persistence happenss without dispersal.
@@ -155,8 +156,8 @@ probPer <- ggplot(Predictions |>
              labeller = label_bquote(cols=paste("a = ",.(meanA)))) +
   theme(legend.position="bottom")
 
-#ggsave(paste0("../figures/case2.pdf"), probPer, 
-#       width=4, height = 3, device = "pdf")  
+ggsave(paste0("../figures/case2.pdf"), probPer, 
+       width=4, height = 3, device = "pdf")  
 
 # Summarize simulated data to add to predictions -----
 SimsSum <- Sims |> 
@@ -167,7 +168,7 @@ SimsSum <- Sims |>
             .by = c(n, meanA, d, vary, k, cvA, p, dispType)) |>
   mutate(k = if_else(k==1, "Equivalence", "No equivalence"))
 
-#Plot for when all assumptions are met, but allowing d to be large -----
+#Plot for when all assumptions are met -----
 ggplot(SimsSum |>
          filter(dispType == "regularD", meanA < 1, 
                 d < 1e-2, 
@@ -185,8 +186,8 @@ ggplot(SimsSum |>
   labs(x=expression(paste("dispersal rate, log"[10],"(d)")), 
        y="nr. of patches, p", fill="patch occupancy")
 
-#ggsave(paste0("../figures/patch-occupancy-met-talk.pdf"), 
-#       width=4.5, height = 2, device = "pdf")  
+ggsave(paste0("../figures/patch-occupancy-met.pdf"), 
+       width=6, height = 3, device = "pdf")  
 
 #Plot for when assumptions are not met ------
 ggplot(SimsSum |> filter(dispType == "exponentialD", 
@@ -195,16 +196,16 @@ ggplot(SimsSum |> filter(dispType == "exponentialD",
   theme(panel.grid = element_blank(), 
         panel.background = element_rect(colour = "snow2")) +
   scale_fill_viridis_c(option="plasma", end=0.9) +
-  geom_point(aes(x=log10(d), y=p, fill=meanProb), col = "black", 
-             pch = 22, cex=2) +
+  geom_point(aes(x=log10(d), y=p, fill=meanProb), col = "white", 
+             shape = 22, cex=3) +
 #  geom_tile(aes(x=log10(d), y=p, fill = meanProb)) +#, pch = 21, cex=3
   facet_grid(k~meanA, 
              labeller = label_bquote(cols = paste(bar(a), " = ", .(meanA)))) +
   labs(x = expression(paste("dispersal rate, log"[10],"(d)")), 
        y = "nr of patches, p", fill= "patch occupancy")
 
-#ggsave(paste0("../figures/patch-occupancy-not-met.pdf"), 
-#       width=5, height = 2.5, device = "pdf")  
+ggsave(paste0("../figures/patch-occupancy-not-met.pdf"), 
+       width=6.5, height = 4.5, device = "pdf")  
 
 # Showcase accuracy of mean r -----
 Mean_predictions <- Predictions_NK |>
