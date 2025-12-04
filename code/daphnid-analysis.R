@@ -209,34 +209,35 @@ ggplot(counts_des_plot) +
 ggsave(filename = "../figures/glm.pdf", 
        width=5, height = 3, device = "pdf")
 
-## Fit glmer for one Daphnid species ------
+## Fit glmer for priority effects ------
 counts_des_models <- counts_des |>
   filter(richness > 0, richness < 3, b == 100) |>
-  select(year, sample, island, poolname, magna, longispina, pulex, 
-         nr_pools_within, desiccation_dynamic) |>
+  mutate(isolation = if_else(nr_pools_within>median(nr_pools_within), "more surrounded", "less surrounded"),
+         desicc = if_else(desiccation_dynamic>median(desiccation_dynamic), "high desiccation", "low desiccation")) |>
+  select(year, sample, island, cluster, poolname, 
+         magna, longispina, pulex, isolation, desicc) 
+
+data <- counts_des_models |>
   pivot_wider(names_from = sample, 
               values_from = c(magna, longispina, pulex)) |>
   remove_missing() 
 
-model_magna <- glmer(magna_summer ~ magna_spring + longispina_spring + pulex_spring +
-                       nr_pools_within + desiccation_dynamic + (1|island/poolname) + (1|year), 
-               data = counts_des_models, 
-               family = binomial(link = "logit"))
+model_magna <- glmer(magna_summer ~ magna_spring + longispina_spring + pulex_spring + 
+                       (1|island/poolname) + (1|year), 
+                     data = data, family = binomial(link = "logit"))
 
 model_longispina <- glmer(longispina_summer ~ magna_spring + longispina_spring + pulex_spring +
-                       desiccation_dynamic + (1|island/poolname) + (1|year), 
-                     data = counts_des_models, 
-                     family = binomial(link = "logit"))
+                       (1|island/poolname) + (1|year), 
+                       data = data, family = binomial(link = "logit"))
 
-# Including nr_pools_within: failed convergence
-summary(model_longispina)
+model_pulex <- glmer(pulex_summer ~ magna_spring + longispina_spring + pulex_spring +
+                            (1|island/poolname) + (1|year), 
+                          data = data, family = binomial(link = "logit"))
+## Including more co-variates: failed convergence
+## To do: Collinearity check and make two versions with different random effect structure
 
-counts_des |>
-  filter(richness > 0, richness < 3, b == 100) |>
-  mutate(isolation = if_else(nr_pools_within>50, "more surrounded", "less surrounded"),
-         desicc = if_else(desiccation_dynamic>1, "high desiccation", "low desiccation")) |>
-  select(year, sample, island, poolname, magna, longispina, pulex,
-         isolation, desicc) |>
+### Plot -----
+counts_des_models |>
   pivot_longer(cols = c(magna, longispina, pulex), names_to = "sp",
                values_to = "presence") |>
   pivot_wider(names_from = sample, 
@@ -244,23 +245,13 @@ counts_des |>
   remove_missing() |>
   summarise(
     summer_presence = mean(summer),
-    summer_presence_sd = sd(summer),
     n = n(),
-    .by = c(sp, spring, year, isolation, desicc)) |>
+    .by = c(sp, spring, year, cluster, isolation, desicc)) |>
   ggplot() + 
   theme_bw() +
   aes(x = factor(spring), y = summer_presence,
-      ymin = summer_presence - summer_presence_sd,
-      ymax = summer_presence + summer_presence_sd,
-      shape = factor(sp),
-      group = factor(sp),
-      col = year) +
-  #geom_errorbar(width = 0.2, position = position_dodge(width = 1)) +
+      shape = factor(sp), group = factor(sp), col = year) +
   geom_point(position = position_dodge(width = 1)) +
-  #geom_text(aes(y = summer_presence + summer_presence_sd, 
-  #              label = paste0(n)), vjust = -0.5,
-  #          position = position_dodge(width = 1), 
-  #          show.legend = F) +
   facet_grid(isolation ~ desicc) + 
   scale_y_continuous(breaks = seq(0, 1, by = 0.5), 
                      limits = c(0, 1)) +
@@ -270,9 +261,46 @@ counts_des |>
 ggsave(filename = "../figures/priority.pdf", 
        width=5, height = 3, device = "pdf")
 
+### Residual analysis ----
+for (sp in c("magna", "longispina", "pulex")) {
+  data <- counts_des_models |>
+    left_join(pool_coords |> 
+                filter(b==10) |>
+                select(!island), by = join_by(poolname == name))
   
+  model <- get(paste0("model_",sp))
+  
+  sim <- simulateResiduals(fittedModel = model, 
+                           plot = F, use.u = T)
+  
+  pdf(paste0("../figures/", sp, "-resid-qq-prior.pdf"), 
+      width = 8, height = 5)
+  plot(sim) 
+  dev.off()
+  
+  pdf(paste0("../figures/", sp, "-resid-prior.pdf"), 
+      width = 10, height = 9)
+  par(mfrow = c(2, 3))
+  plotResiduals(sim, as.factor(data$year))
+  title(xlab = "catPred", col.lab = "white")
+  title(xlab = "year")
+  plotResiduals(sim, as.factor(data$island))
+  title(xlab = "catPred", col.lab = "white")
+  title(xlab = "island")
+  coordinates(data) <- ~ latitude_corr + longitude_corr  # Define spatial coordinates
+  data$res <- residuals(sim)
+  variog <- variogram(res ~ 1, data)
+  plot(variog$dist, variog$gamma, main = "variogram",
+       xlab = "distance", ylab = "semivariance", 
+       ylim = c(0, max(variog$gamma)))
+  dev.off()
+}  
 
-  
+## Main effects ---
+summary(model_magna)
+summary(model_longispina)
+summary(model_pulex)
+
 
 
 
