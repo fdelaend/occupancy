@@ -7,6 +7,7 @@ library(gstat) # variogram
 library(geodist) #distance calculation
 library(sp) # coordinates
 library(DHARMa) # glmer residuals check
+library(ggeffects) # plot effects of GLMMs
 
 # Read and organise data ----
 
@@ -72,33 +73,34 @@ counts_des |>
   filter(b == 10, richness == 3) |> #richness == 3, or >0
   nrow()
 
-# Fit glmer for different values of b
+## Fit glmer for different values of b -----
+### Actual fitting ------
 counts_des_models <- counts_des |>
   filter(richness > 0, richness < 3) |>
   group_by(sample, b) |>
   nest() |>
-  mutate(model1 = map(data, ~ glmer(pairs ~ nr_pools_within + desiccation_dynamic +
+  mutate(version1 = map(data, ~ glmer(pairs ~ nr_pools_within + desiccation_dynamic +
                                       (1|island) + (1|year), data = .x, 
                                     family = binomial(link = "logit"))),
-         model2 = map(data, ~ glmer(pairs ~ nr_pools_within + desiccation_dynamic +
+         version2 = map(data, ~ glmer(pairs ~ nr_pools_within + desiccation_dynamic +
                                       (1|island/pool) + (1|year), data = .x, 
                                     family = binomial(link = "logit"))),
          # Simplified model used for plotting
-         model3 = map(data, ~ glm(pairs ~ nr_pools_within, data = .x, 
+         version3 = map(data, ~ glm(pairs ~ nr_pools_within, data = .x, 
                                     family = binomial(link = "logit"))),
-         model_selection = map2(model1, model2, ~ tidy(anova(.x, .y, test = "Chisq"))))#, # model2 always better
+         model_selection = map2(version1, version2, ~ tidy(anova(.x, .y, test = "Chisq"))))#, # model2 always better
          #coefficients = map(model2, ~ coefficients(.x)))
          #dispersion = map(model2, ~ testDispersion(.x, plot = F)),
          #residuals = map(model2, ~ simulateResiduals(.x, use.u = T, plot = F))) #|> 
 
-## Model selection table and dispersal test model 2----
+### Model selection table and dispersal test model 2----
 counts_des_models |>
   ungroup() |>
   #do dispersal test of model 2
-  mutate(`p, disp.` = map(model2, ~ testDispersion(.x, plot = F)$p.value)) |>
-  select(!data & !model1 & !model2 & !model3) |>
+  mutate(`p, disp.` = map(version2, ~ testDispersion(.x, plot = F)$p.value)) |>
+  select(!data & !version1 & !version2 & !version3) |>
   unnest(model_selection) |>
-  mutate(model = if_else(term == ".x", "model 1", "model 2")) |>
+  mutate(model = if_else(term == ".x", "version 1", "version 2")) |>
   select(!term & !npar) |>
   mutate(b = as.character(b),
          `p, comp.` = as.character(signif(p.value,3))) |>
@@ -111,7 +113,7 @@ counts_des_models |>
         scientific = TRUE,
         include.rownames = FALSE)
 
-## Residual analysis ----
+### Residual analysis ----
 
 for (i in 1:nrow(counts_des_models)) {
   model <- counts_des_models$model2[[i]]
@@ -147,7 +149,7 @@ for (i in 1:nrow(counts_des_models)) {
   dev.off()
 }
 
-## Estimated effects of final models ----
+### Estimated effects of final models ----
 counts_des_models |>
   ungroup() |>
   select(!data & !model1 & !model3 & !model_selection) |>
@@ -166,7 +168,7 @@ counts_des_models |>
         scientific = TRUE,
         include.rownames = FALSE)
 
-## Plot ----
+### Plot ----
 counts_des_plot <- counts_des_models |>
   mutate(data = map2(data, model3, ~ .x |> 
                        mutate(preds = predict(.y, type="response")))) |>
@@ -210,96 +212,123 @@ ggsave(filename = "../figures/glm.pdf",
        width=5, height = 3, device = "pdf")
 
 ## Fit glmer for priority effects ------
-counts_des_models <- counts_des |>
-  filter(richness > 0, richness < 3, b == 100) |>
+# filter data: only pairs and singlets. 
+# Pick default b, not important 
+# isolation and desiccation classes for bookkeeping
+counts_des_alt <- counts_des |>
+  filter(richness > 0, richness < 3, 
+         b == 100) |>
   mutate(isolation = if_else(nr_pools_within>median(nr_pools_within), "more surrounded", "less surrounded"),
          desicc = if_else(desiccation_dynamic>median(desiccation_dynamic), "high desiccation", "low desiccation")) |>
-  select(year, sample, island, cluster, poolname, 
+  select(year, sample, island, cluster, poolname, latitude_corr, longitude_corr,
          magna, longispina, pulex, isolation, desicc) 
 
-data <- counts_des_models |>
+data <- counts_des_alt |>
   pivot_wider(names_from = sample, 
               values_from = c(magna, longispina, pulex)) |>
-  remove_missing() 
-
-model_magna <- glmer(magna_summer ~ magna_spring + longispina_spring + pulex_spring + 
-                       (1|island/poolname) + (1|year), 
-                     data = data, family = binomial(link = "logit"))
-
-model_longispina <- glmer(longispina_summer ~ magna_spring + longispina_spring + pulex_spring +
-                       (1|island/poolname) + (1|year), 
-                       data = data, family = binomial(link = "logit"))
-
-model_pulex <- glmer(pulex_summer ~ magna_spring + longispina_spring + pulex_spring +
-                            (1|island/poolname) + (1|year), 
-                          data = data, family = binomial(link = "logit"))
-## Including more co-variates: failed convergence
-## To do: Collinearity check and make two versions with different random effect structure
-
-### Plot -----
-counts_des_models |>
-  pivot_longer(cols = c(magna, longispina, pulex), names_to = "sp",
-               values_to = "presence") |>
-  pivot_wider(names_from = sample, 
-              values_from = presence) |>
   remove_missing() |>
-  summarise(
-    summer_presence = mean(summer),
-    n = n(),
-    .by = c(sp, spring, year, cluster, isolation, desicc)) |>
-  ggplot() + 
-  theme_bw() +
-  aes(x = factor(spring), y = summer_presence,
-      shape = factor(sp), group = factor(sp), col = year) +
-  geom_point(position = position_dodge(width = 1)) +
-  facet_grid(isolation ~ desicc) + 
-  scale_y_continuous(breaks = seq(0, 1, by = 0.5), 
-                     limits = c(0, 1)) +
-  labs(x = "presence in spring", y = "P(presence in summer)", 
-         shape = "species")
-  
-ggsave(filename = "../figures/priority.pdf", 
-       width=5, height = 3, device = "pdf")
+  mutate(obs = row_number()) |>
+  #filter(n>20) |>
+  mutate(island = as.factor(island),
+         year = as.factor(year))
 
-### Residual analysis ----
-for (sp in c("magna", "longispina", "pulex")) {
-  data <- counts_des_models |>
-    left_join(pool_coords |> 
-                filter(b==10) |>
-                select(!island), by = join_by(poolname == name))
-  
-  model <- get(paste0("model_",sp))
-  
+all_species <- c("magna", "longispina", "pulex")
+
+### Actual fitting --------
+counts_des_models <- tibble(focal = all_species) |>
+  mutate(model = map(focal, ~ fit_priority(focal = .x, 
+                                           other = all_species[all_species != .x],
+                                           data = data))) #|>
+  #pivot_wider(names_from = version, names_prefix = "v", values_from = model) |>
+  #mutate(model_selection = map2(v1, v2, ~ tidy(anova(.x, .y, test = "Chisq"))))#, # model2 always better
+
+### Dispersal test ----
+counts_des_models |>
+  ungroup() |>
+  #do dispersal test
+  mutate(`p, disp.` = map(model, ~ testDispersion(.x, plot = F)$p.value)) |>
+  select(-model) |>
+  as.data.frame() |>
+  xtable(digits = c(rep(0, 2), 3)) |>
+  print(type = "latex",
+        scientific = TRUE,
+        include.rownames = FALSE)
+
+### Residual analysis ------
+
+coordinates(data) <- ~ latitude_corr + longitude_corr  # Define spatial coordinates
+
+for (i in 1:nrow(counts_des_models)) {
+  model <- counts_des_models$model[[i]]
   sim <- simulateResiduals(fittedModel = model, 
                            plot = F, use.u = T)
   
-  pdf(paste0("../figures/", sp, "-resid-qq-prior.pdf"), 
+  pdf(paste0("../figures/", i, "-resid-qq-prior.pdf"), 
       width = 8, height = 5)
   plot(sim) 
   dev.off()
   
-  pdf(paste0("../figures/", sp, "-resid-prior.pdf"), 
-      width = 10, height = 9)
-  par(mfrow = c(2, 3))
+  pdf(paste0("../figures/", i, "-resid-prior.pdf"), 
+      width = 8, height = 5)
+  par(mfrow = c(1, 2))
   plotResiduals(sim, as.factor(data$year))
   title(xlab = "catPred", col.lab = "white")
   title(xlab = "year")
-  plotResiduals(sim, as.factor(data$island))
-  title(xlab = "catPred", col.lab = "white")
-  title(xlab = "island")
-  coordinates(data) <- ~ latitude_corr + longitude_corr  # Define spatial coordinates
   data$res <- residuals(sim)
   variog <- variogram(res ~ 1, data)
   plot(variog$dist, variog$gamma, main = "variogram",
        xlab = "distance", ylab = "semivariance", 
        ylim = c(0, max(variog$gamma)))
   dev.off()
-}  
+}
 
-## Main effects ---
-summary(model_magna)
-summary(model_longispina)
-summary(model_pulex)
+### Estimated effects of final models ----
+counts_des_models |>
+  ungroup() |>
+  mutate(results = map(model, ~ tidy(.x))) |>
+  select(!model) |>
+  unnest(results) |>
+  select(!effect) |>
+  mutate(estimate = as.character(signif(estimate,3)),
+         std.error = as.character(signif(std.error,3)),
+         statistic = as.character(signif(statistic,3)),
+         p.value = as.character(signif(p.value,3))) |>
+  as.data.frame() |>
+  xtable() |>
+  print(type = "latex",
+        scientific = TRUE,
+        include.rownames = FALSE)
+
+### Plot -----
+counts_des_models_plot <- counts_des_models |>
+  mutate(predictors = map(model, ~ gsub("as.factor\\((.*)\\)", "\\1", attr(terms(.x), "term.labels"))),
+         predictions = map2(model, predictors, ~ ggpredict(.x, terms = .y, bias_correction = FALSE))) |>
+  select(!predictors) |>
+  unnest(predictions) |>
+  mutate(group = factor(group, levels = c(0, 1),
+                       labels = c("no", "yes")))
+
+ggplot(counts_des_models_plot, 
+       aes(x = factor(x), y = predicted,
+                 colour = group, group = group)) +
+  scale_colour_manual(values = c("grey50", "black")) +
+  geom_point(position = position_dodge(width = 0.3), size = 3) +
+  geom_line(position = position_dodge(width = 0.3)) +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high),
+                width = 0.1,
+                position = position_dodge(width = 0.3)) +
+  scale_y_continuous("P(focal sp. in summer)", 
+                     limits = c(0, 1)) +
+  scale_x_discrete("Focal sp. in spring", 
+                   labels = c("0" = "no", "1" = "yes")) +
+  #scale_colour_discrete("Other sp. in spring") +
+  theme_bw() + 
+  facet_grid(.~focal) +
+  labs(col = "Other sp. in spring")
+
+ggsave(filename = "../figures/priority.pdf", 
+       width=5, height = 2, device = "pdf")
+
 
 
 

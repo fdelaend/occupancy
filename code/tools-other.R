@@ -187,3 +187,35 @@ read_simulations <- function(file){
     select(!A & !D & !distances & !N0 & !coords) #ditch all unneeded data
 }
 
+#fit glmer for priority effects
+fit_priority <- function(focal = "magna", 
+                         other = c("longispina", "pulex"), 
+                         data) {
+  
+# Chi-square test
+  corr <- chisq.test(table(data[[paste0(other[1], "_spring")]],
+                data[[paste0(other[2], "_spring")]]))
+  # If the two other species are correlated (p < 0.05), keep only the first
+  if (corr$p.value < 0.05) {
+    other_use <- other[1]
+  } else {
+    other_use <- other
+  }
+  
+  # Build the fixed-effect part
+    effects_other <- paste0("as.factor(", other_use, "_spring)", collapse = " + ")
+    form <- paste0(
+      focal, "_summer ~ as.factor(", focal, "_spring) + ",
+      effects_other)
+
+  # Random-effects structure
+  form <- paste0(form, " + (1 | island:year)") 
+
+  # Fit the model
+  glmer(
+    as.formula(form),
+    data   = data,
+    family = binomial(link = "logit"),
+    control = glmerControl(optimizer = "bobyqa")
+  )
+}
