@@ -8,6 +8,7 @@ library(geodist) #distance calculation
 library(sp) # coordinates
 library(DHARMa) # glmer residuals check
 library(ggeffects) # plot effects of GLMMs
+source("tools-other.R") # function to fit glmms for priority effects
 
 # Read and organise data ----
 
@@ -212,12 +213,12 @@ ggsave(filename = "../figures/glm.pdf",
        width=5, height = 3, device = "pdf")
 
 ## Fit glmer for priority effects ------
-# filter data: only pairs and singlets. 
+# filter data: only pairs and singlets, and only isolated pools. 
 # Pick default b, not important 
 # isolation and desiccation classes for bookkeeping
 counts_des_alt <- counts_des |>
   filter(richness > 0, richness < 3, 
-         b == 100) |>
+         b == 100, nr_pools_within < 20) |>
   mutate(isolation = if_else(nr_pools_within>median(nr_pools_within), "more surrounded", "less surrounded"),
          desicc = if_else(desiccation_dynamic>median(desiccation_dynamic), "high desiccation", "low desiccation")) |>
   select(year, sample, island, cluster, poolname, latitude_corr, longitude_corr,
@@ -329,6 +330,29 @@ ggplot(counts_des_models_plot,
 ggsave(filename = "../figures/priority.pdf", 
        width=5, height = 2, device = "pdf")
 
+## Alternative option: -----
+# focus only on isolates ponds, 
+# that have a single sp in spring and either 
+# another sp (exclusion) or both sp (coex) in summer. 
+# Model the occurrence of both events.
+
+counts_des_alt <- counts_des |>
+  mutate(keep = if_else(((richness==1)&(sample=="spring"))|sample=="summer", 1, 0)) |>
+  filter(richness > 0, richness < 3, keep == 1,
+         b == 100, nr_pools_within < 20) |>
+  select(richness, year, sample, island, cluster, poolname, latitude_corr, longitude_corr,
+         magna, longispina, pulex) 
+
+data <- counts_des_alt |>
+  pivot_wider(names_from = sample, 
+              values_from = c(magna, longispina, pulex)) |>
+  remove_missing() |>
+  mutate(obs = row_number()) |>
+  #filter(n>20) |>
+  mutate(island = as.factor(island),
+         year = as.factor(year))
+
+all_species <- c("magna", "longispina", "pulex")
 
 
 
