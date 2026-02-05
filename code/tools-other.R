@@ -1,7 +1,11 @@
 library(mvtnorm)
+library(tidyverse)
+library(brms)
+library(tidybayes)
+library(bayesplot)
 library(pracma)
 library(gridExtra)
-library(feasoverlap)
+#library(feasoverlap)
 library(patchwork)
 library(reticulate) #to run python code from R
 use_python("/usr/local/bin/python3.10") #load your preferred python version
@@ -219,3 +223,24 @@ fit_priority <- function(focal = "magna",
     control = glmerControl(optimizer = "bobyqa")
   )
 }
+
+#fit glmer for priority effects, only pools with focal in spring
+fit_priority_2 <- function(data, focal = "magna", 
+                           adapt_delta = 0.9, 
+                           warmup = 5000, iter = 7000) {
+  
+  # Build the fixed-effect part
+  form <- paste0(focal, "_summer_alone ~ as.factor(", focal, "_spring)")
+  
+  # Random-effects structure
+  form <- paste0(form, " + (1|island/pool) + (1|year)")  
+  
+  # Fit the model
+  brm(as.formula(form),
+    data   = data,
+    family = brms::bernoulli(),
+    control = list(adapt_delta = adapt_delta),
+    warmup = warmup,
+    iter = iter)
+}
+
