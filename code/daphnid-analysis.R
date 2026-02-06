@@ -249,7 +249,7 @@ ggplot(test, aes(x = nr_pools_within, y = p_mean, col = as.factor(b))) +
   theme_bw()
 
 ggsave(filename = "../figures/proportion_nearby.pdf", 
-       width=4, height = 2, device = "pdf")
+       width=6, height = 3, device = "pdf")
 
 ### Model checking --------
 test <- models_prop |>
