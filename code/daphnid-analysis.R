@@ -112,6 +112,7 @@ models_priority <- tibble(focal = all_species) |>
                                       data = data_priority))) 
 
 saveRDS(models_priority, "../data/models_priority.RDS")
+models_priority <- readRDS("../data/models_priority.RDS")
 
 ### Model plotting --------
 # get out the typical names of the parameters we want to plot
@@ -139,6 +140,13 @@ ggsave(filename = "../figures/priority.pdf",
 #comparison w out of the box solution
 #mcmc_areas(models_priority$model[[3]], 
 #           pars = colnames(as.matrix(models_priority$model[[3]]))[1:5])
+
+### Model checking --------
+test <- models_priority |>
+  mutate(ppc_draws = map(model, ~posterior_predict(.x)))
+
+ppc_dens_overlay(y = data_priority$pulex_summer_alone, 
+                 yrep = test$ppc_draws[[3]][1:100, ])
 
 ## Proportion of pairs -----
 ### Model fitting ------
