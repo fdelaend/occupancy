@@ -145,9 +145,21 @@ ggsave(filename = "../figures/priority.pdf",
 test <- models_priority |>
   mutate(ppc_draws = map(model, ~posterior_predict(.x)))
 
-ppc_dens_overlay(y = data_priority$pulex_summer_alone, 
-                 yrep = test$ppc_draws[[3]][1:100, ])
+p1 <- ppc_dens_overlay(y = data_priority$magna_summer_alone, 
+                 yrep = test$ppc_draws[[1]][1:100, ]) + 
+  labs(title = "magna") 
+p2 <- ppc_dens_overlay(y = data_priority$longispina_summer_alone, 
+                 yrep = test$ppc_draws[[2]][1:100, ]) +
+  labs(title = "longispina") 
+p3 <- ppc_dens_overlay(y = data_priority$pulex_summer_alone, 
+                 yrep = test$ppc_draws[[3]][1:100, ]) +
+  labs(title = "pulex")
 
+(p1 | p2 | p3) 
+
+ggsave("../figures/check_priority.pdf",
+       width=8, height = 3, device = "pdf")                 
+                               
 ## Proportion of pairs -----
 ### Model fitting ------
 models_prop <- daphnids_des |>
@@ -161,6 +173,7 @@ models_prop <- daphnids_des |>
                                  iter = 8000)))
 
 saveRDS(models_prop, "../data/models_prop.RDS")
+models_prop <- readRDS("../data/models_prop.RDS")
 
 ### Model plotting --------
 #### Posteriors -------
@@ -235,6 +248,25 @@ ggplot(test, aes(x = nr_pools_within, y = p_mean, col = as.factor(b))) +
 ggsave(filename = "../figures/proportion_nearby.pdf", 
        width=4, height = 2, device = "pdf")
 
+### Model checking --------
+test <- models_prop |>
+  mutate(ppc_draws = map(model, ~posterior_predict(.x)))
+
+for (b in c(50, 100)){
+  for (sample in c("spring", "summer")) {
+    index <- which((test$b==b)&(test$sample==sample))
+    p <- ppc_dens_overlay(y = (test$data[[index]]$pairs=="present")*1, 
+                          yrep = test$ppc_draws[[index]][1:100, ]) + 
+      labs(title = paste("b=", b, "; sample = ", sample))
+    assign(paste0("b",b,sample), p)
+  }
+}
+
+
+(b50spring | b50summer)/(b100spring | b100summer) 
+
+ggsave("../figures/check_prop.pdf",
+       width=6, height = 5, device = "pdf")        
 
 # LEFTOVERS --------------------
 ### Dispersal test ----
