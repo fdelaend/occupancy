@@ -244,3 +244,19 @@ fit_priority_2 <- function(data, focal = "magna",
     iter = iter)
 }
 
+# Model printing for paper -----
+# The ... contain the variables to be selected apart from 'model'
+print_model <- function(data, ...){
+  test <- data |>
+    ungroup() |>
+    mutate(results = map(model, ~ tidy(.x))) |>
+    select(results, ...) |>
+    unnest(results) |>
+    as.data.frame() |>
+    xtable() |>
+    print(type = "latex",
+          scientific = TRUE,
+          include.rownames = FALSE)
+}
+
+

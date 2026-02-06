@@ -159,6 +159,9 @@ p3 <- ppc_dens_overlay(y = data_priority$pulex_summer_alone,
 
 ggsave("../figures/check_priority.pdf",
        width=8, height = 3, device = "pdf")                 
+
+### Model printing -----
+print_model(models_priority, focal)
                                
 ## Proportion of pairs -----
 ### Model fitting ------
@@ -267,6 +270,9 @@ for (b in c(50, 100)){
 
 ggsave("../figures/check_prop.pdf",
        width=6, height = 5, device = "pdf")        
+
+### Model printing -------------
+print_model(models_prop, sample, b)
 
 # LEFTOVERS --------------------
 ### Dispersal test ----
