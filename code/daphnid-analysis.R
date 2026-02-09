@@ -1,12 +1,12 @@
 library(grateful)
 library(xtable)
 library(broom.mixed)
-library(lme4) # Mixed models
-library(gstat) # variogram
-library(geodist) #distance calculation
-library(sp) # coordinates
-library(DHARMa) # glmer residuals check
-library(ggeffects) # plot effects of GLMMs
+#library(lme4) # Mixed models
+#library(gstat) # variogram
+#library(geodist) #distance calculation
+#library(sp) # coordinates
+#library(DHARMa) # glmer residuals check
+#library(ggeffects) # plot effects of GLMMs
 source("tools-other.R") # function to fit glmms for priority effects
 
 # Read and organise data ------------
