@@ -1,6 +1,6 @@
 
 source("tools-simulations.R")
-parallel_id <- Sys.getenv('SLURM_ARRAY_TASK_ID') # Normally you would get this from the cluster: Sys.getenv('SLURM_ARRAY_TASK_ID')
+parallel_id <- Sys.getenv('SLURM_ARRAY_TASK_ID') # Get task ID from the cluster
 
 # SIMULATIONS ----
 ## Simulations ------

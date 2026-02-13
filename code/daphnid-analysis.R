@@ -1,12 +1,6 @@
 library(grateful)
 library(xtable)
 library(broom.mixed)
-#library(lme4) # Mixed models
-#library(gstat) # variogram
-#library(geodist) #distance calculation
-#library(sp) # coordinates
-#library(DHARMa) # glmer residuals check
-#library(ggeffects) # plot effects of GLMMs
 source("tools-other.R") # function to fit glmms for priority effects
 
 # Read and organise data ------------
@@ -108,7 +102,7 @@ all_species <- c("magna", "longispina", "pulex")
 ### Model fitting --------
 models_priority <- tibble(focal = all_species) |>
   mutate(model = map(focal, 
-                     ~ fit_priority_2(focal = .x, adapt_delta = 0.999,
+                     ~ fit_priority(focal = .x, adapt_delta = 0.999,
                                       data = data_priority))) 
 
 saveRDS(models_priority, "../data/models_priority.RDS")

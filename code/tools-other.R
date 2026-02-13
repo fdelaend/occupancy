@@ -5,7 +5,7 @@ library(tidybayes)
 library(bayesplot)
 library(pracma)
 library(gridExtra)
-#library(feasoverlap)
+library(feasoverlap)
 library(patchwork)
 library(reticulate) #to run python code from R
 use_python("/usr/local/bin/python3.10") #load your preferred python version
@@ -14,16 +14,17 @@ source_python("MVN.py")
 cbPalette <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", 
                "#0072B2", "#D55E00", "#CC79A7")#
 
-get_N_total <- function(meanA=0.2, d=1, n=10, r=1){ #a=comp.strength; d=self limit.
-  n*r/(d+meanA*(n-1))
-}
-
-#get the density of a species i when there is no dispersal
+# Eq. 21, SI
 get_N0i <- function(a=0.5, n=10, r=1, ri=0.1){
   (a*(n - 1)*r - ri*(a*(n - 2) + 1))/((a - 1)*(a*(n - 1) + 1))
 }
 
-#get N1i when i is excluded w/o dispersal
+# Eq. 22, SI
+get_N_total <- function(meanA=0.2, d=1, n=10, r=1){ 
+  n*r/(d+meanA*(n-1))
+}
+
+# Eq. 7, main text.
 #NTotalK = total abundance of i across all patches without the focal patch
 #ri = r of i, given that it gets excluded w/o dispersal
 #a = interaction strength
@@ -32,7 +33,7 @@ get_N1iExc <- function(NTotalK=10, ri=1, a=0.5, SumN0j){
   NTotalK/(a*SumN0j - ri)
 }
 
-#get N1i when i persists w/o dispersal
+# Eq. 29, SI
 #a = interaction strength
 #n and m: nr of species in the regional pool and in the focal patch
 #meanN1Exc = mean of N1iExc across species
@@ -43,7 +44,8 @@ get_N1iPer <- function(a=0.5, n=4, m=1, meanrho, rhoi, p, meanN1Exc){
     ((1-a)*(a*(m-1)+1))
 }
 
-#compute fraction of patches with m species in a metacommunity of n species
+#Eq. 14, SI 
+#fraction of patches with m species in a metacommunity of n species
 #without dispersal. For m>1
 get_fraction_m <- function(meanA=0.5, m=2, n=3, ...){
   #n x n matrix
@@ -58,7 +60,7 @@ get_fraction_m <- function(meanA=0.5, m=2, n=3, ...){
   ifelse(m==1, NA, choose(n, m) * feas1combo)
 }
 
-#make a distribution of nr of species in a patch in
+#Application of Eq. 14 to make a distribution of nr of species in a patch in
 #case there is no dispersal
 make_distribution <- function(n, meanA=0.5){
   probs <- NULL
@@ -68,18 +70,35 @@ make_distribution <- function(n, meanA=0.5){
   }
   probs
 }
-#truncate a distribution (i.e. cut off fraction below (if ditch="down") 
-#or above (ditch="up") a certain quantile q)
-#pdfFitted = output of density()
-#q = quantile, where 1 = 100th quantile, 0.5 = 50th etc..
-trunc_dist <- function(pdfFitted, q=0.5, ditch="up"){
-  cumprob <- cumsum(pdfFitted$y)/sum(pdfFitted$y) #discretize to cum. proba.
-  #identify x to be ditched
-  if(ditch=="down") {Qs<-which(cumprob>=q)} else {Qs<-which(cumprob<=q)}
-  list(x=pdfFitted$x[Qs], y=pdfFitted$y[Qs])
+
+#Truncate a fitted probability density at a given quantile.
+#Truncates a discretized probability density function by removing either the
+#lower or upper tail beyond a specified quantile. This is useful for
+#restricting analyses to a central portion of a distribution.
+#pdfFitted is a list, containing components `x`
+#(evaluation points) and `y` (density values).
+#q is the quantile at which to truncate the distribution
+#ditch indicates the direction of truncation:
+#"down":Remove values below the `q` quantile (retain upper tail).
+#"up": Remove values above the `q` quantile (retain lower tail).
+trunc_dist <- function(pdfFitted, q = 0.5, ditch = "up") {
+  # Discretize density to cumulative probability
+  cumprob <- cumsum(pdfFitted$y) / sum(pdfFitted$y)
+  
+  # Identify indices to retain
+  if (ditch == "down") {
+    Qs <- which(cumprob >= q)
+  } else {
+    Qs <- which(cumprob <= q)
+  }
+  
+  list(
+    x = pdfFitted$x[Qs],
+    y = pdfFitted$y[Qs]
+  )
 }
 
-#get mean of a truncated pdf
+#gets the mean of a truncated pdf
 #pdfFitted = output of trunc_dist()
 #q = quantile, where 1 = 100th quantile, 0.5 = 50th etc..
 get_mean_trunc <- function(pdfFitted, q=0.5, ditch="up"){
@@ -87,7 +106,7 @@ get_mean_trunc <- function(pdfFitted, q=0.5, ditch="up"){
   sum(pdfTrunc$x*pdfTrunc$y)/sum(pdfTrunc$y)
 }
 
-#mean R of the persisting sp
+# Eq. 25, SI
 #x = factor to divide a*Nt by in order to get the mean
 get_RMeanM <- function(a=0.8, m=1, n=4, r=1.01, x=2){
   ((1 + a*(-1 + m))*n*r*x)/(m*(a*(n + m*(-1 + x) - x) + x)) 
@@ -161,71 +180,8 @@ sample_random_Ni <- function(samples, d, meanA, n, p, ...){
            NiExc = d*N1iExc, #Ni when i is excluded w/o disp.
            NiPer = N0i+d*N1iPer)}
  
-# Read the simulation results, 
-# and ditch the variables that take up lots of memory and won't be used
-# and summarize the density data
-# (This last step is a workaround until R gets an update on the cluster;
-# This summary is currently not done correctly bc of an older R version on the cluster)
-read_simulations <- function(file){
-  read_rds(file) #|>
-    select(!summaryM) |>
-    #1/ Summarize the simulated data: per m, compute the nr of patches and total biomass of an average patch
-    (\(x) mutate(x, summaryM = pmap(x, \(NHat, R, n,...) 
-                                    NHat |>
-                                      mutate(present = density>extinctionThreshold,
-                                             R=R) |>
-                                      summarize(m = as_factor(sum(present)),
-                                                NTotal = sum(density),
-                                                meanRPer = sum(R*present)/sum(present), 
-                                                .by = location) |>
-                                      mutate(m = fct_expand(m, as.character(c(1:n)))) |>
-                                      group_by(m, .drop=F) |>
-                                      summarize(nrPatches = n(),#nr of patches with m sp.
-                                                NTotal = mean(NTotal),#total biomass in a patch with m sp.
-                                                meanRPer = mean(meanRPer)))))()  |>#mean r of persisting sp.
-    #2/proportion of patches in which all n species persist
-    mutate(propPatchesN = 1/p*map2_dbl(summaryM, n, ~ (.x |> filter(m==.y))$nrPatches)) |>
-    #3/total density across all patches of a species
-    mutate(NTotalK = map(NHat, ~ .x |> 
-                           summarize(NTotalK = sum(density), .by = sp))) |>
-    select(!A & !D & !distances & !N0 & !coords) #ditch all unneeded data
-}
-
-#fit glmer for priority effects
-fit_priority <- function(focal = "magna", 
-                         other = c("longispina", "pulex"), 
-                         data) {
-  
-# Chi-square test
-  corr <- chisq.test(table(data[[paste0(other[1], "_spring")]],
-                data[[paste0(other[2], "_spring")]]))
-  # If the two other species are correlated (p < 0.05), keep only the first
-  if (corr$p.value < 0.05) {
-    other_use <- other[1]
-  } else {
-    other_use <- other
-  }
-  
-  # Build the fixed-effect part
-    effects_other <- paste0("as.factor(", other_use, "_spring)", collapse = " + ")
-    form <- paste0(
-      focal, "_summer ~ as.factor(", focal, "_spring) + ",
-      effects_other)
-
-  # Random-effects structure
-  form <- paste0(form, " + (1 | island:year)") 
-
-  # Fit the model
-  glmer(
-    as.formula(form),
-    data   = data,
-    family = binomial(link = "logit"),
-    control = glmerControl(optimizer = "bobyqa")
-  )
-}
-
-#fit glmer for priority effects, only pools with focal in spring
-fit_priority_2 <- function(data, focal = "magna", 
+#fit Bayesian glmm for priority effects, only pools with focal in spring
+fit_priority <- function(data, focal = "magna", 
                            adapt_delta = 0.9, 
                            warmup = 5000, iter = 7000) {
   

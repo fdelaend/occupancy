@@ -1,4 +1,7 @@
 
+# These simulations evaluate how mean density across patches varies with d,
+# with the objective to check when the effect of d appears linear. 
+
 source("tools-simulations.R")
 
 Sims <-
