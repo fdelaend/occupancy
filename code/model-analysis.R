@@ -4,15 +4,15 @@ source("tools-other.R")
 
 # Combine all simulation output from cluster into a single object ----
 Sims <- tibble(filenr = c(1:100)) |>
-  mutate(data = map(filenr, ~read_rds(paste("../simulated-data/simulated-data-2/",.x,"data.rds", sep="")))) |>
+  mutate(data = map(filenr, ~read_rds(paste("../simulated-data/simulated-data/",.x,"data.rds", sep="")))) |>
   unnest(data) |>
   select(!filenr) |>
   mutate(rep = as.numeric(rep))
 # Save the object
-saveRDS(Sims, file=paste("../simulated-data/simulated-data-2/all-data.RDS",sep=""))
+saveRDS(Sims, file=paste("../simulated-data/simulated-data/all-data.RDS",sep=""))
 
 # Or read it if already done ----
-Sims <- readRDS(file="../simulated-data/simulated-data-2/all-data.RDS")
+Sims <- readRDS(file="../simulated-data/simulated-data/all-data.RDS")
 
 # Recover the distribution of the growth rates --------
 Rs     <- Sims |> 
@@ -37,10 +37,10 @@ Predictions_fm <- expand_grid(n = 10, m = c(1:10),
   summarise(fmPredicted = mean(fmPredicted), 
             .by = c(n, m, meanA))
 # Save the object
-saveRDS(Predictions_fm, file=paste("../simulated-data/simulated-data-2/Predictions_fm.RDS",sep=""))
+saveRDS(Predictions_fm, file=paste("../simulated-data/simulated-data/Predictions_fm.RDS",sep=""))
 
 # Or read it if already done ----
-Predictions_fm <- readRDS(file="../simulated-data/simulated-data-2/Predictions_fm.RDS")
+Predictions_fm <- readRDS(file="../simulated-data/simulated-data/Predictions_fm.RDS")
   
 # Predict regional total of density of a species (eq.13 in SI) for diffuse competition ----
 Predictions_NK <- Predictions_fm |> 
@@ -70,9 +70,6 @@ NtotalK <- ggplot(Predictions_NK |>
        fill=expression(paste("log"[10],"(", Sigma[{k}],"N"[{"0,i"}]^{(k)}, ")"))) +
   theme(legend.position="bottom")
 
-#ggsave(paste0("../figures/Nk.pdf"), width=3, height = 3, 
-#       device = "pdf")
-
 # Predict probability to persist when excluded w/o dispersal -----
 Predictions <- Predictions_NK |>
   filter(meanA > 0) |> #Otherwise error when computing sample_ri
@@ -94,9 +91,9 @@ Predictions <- Predictions_NK |>
   (\(x) mutate(x, prob2 = pmap_dbl(x, get_patch_occupancy)))() |>
   select(!data & !A)
 
-saveRDS(Predictions, file="../simulated-data/simulated-data-2/Predictions.RDS")
+saveRDS(Predictions, file="../simulated-data/simulated-data/Predictions.RDS")
 #Or read it if already done ----
-Predictions <- readRDS(file="../simulated-data/simulated-data-2/Predictions.RDS")
+Predictions <- readRDS(file="../simulated-data/simulated-data/Predictions.RDS")
 
 # Plot this probability ----
 probExc <- ggplot(Predictions |> 
