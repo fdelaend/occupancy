@@ -8,6 +8,7 @@
 /mathematica/teo/*.*
 /data/
 /simulated-data/
+/paper_from_overleaf/*.*
 !/simulated-data/.gitkeep
 
 # History files
