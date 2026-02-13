@@ -9,6 +9,8 @@
 /data/
 /simulated-data/
 /paper_from_overleaf/*.*
+/paper_from_overleaf/zenodo/*.*
+
 !/simulated-data/.gitkeep
 
 # History files
