@@ -14,123 +14,155 @@ source_python("MVN.py")
 cbPalette <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", 
                "#0072B2", "#D55E00", "#CC79A7")#
 
-# Eq. 21, SI
+## Eq. 21 (Supplementary Information)
+#' Equilibrium density of species i without dispersal.
+#'
+#' @param a Interspecific competition coefficient.
+#' @param n Number of species in the local community.
+#' @param r Mean intrinsic growth rate of non-focal species.
+#' @param ri Intrinsic growth rate of the focal species.
+#'
+#' @return Equilibrium density of species i (Eq. 21).
 get_N0i <- function(a=0.5, n=10, r=1, ri=0.1){
   (a*(n - 1)*r - ri*(a*(n - 2) + 1))/((a - 1)*(a*(n - 1) + 1))
 }
 
-# Eq. 22, SI
+## Eq. 22 (Supplementary Information)
+#' Total equilibrium abundance without dispersal.
+#'
+#' @param meanA Mean interspecific interaction strength.
+#' @param d Self-regulation term.
+#' @param n Number of species.
+#' @param r Mean intrinsic growth rate.
+#'
+#' @return Total equilibrium abundance (Eq. 22).
 get_N_total <- function(meanA=0.2, d=1, n=10, r=1){ 
   n*r/(d+meanA*(n-1))
 }
 
-# Eq. 7, main text.
-#NTotalK = total abundance of i across all patches without the focal patch
-#ri = r of i, given that it gets excluded w/o dispersal
-#a = interaction strength
-#SumN0j = abundance of all species 
+## Eq. 7 (Main Text)
+#' Density contribution of unit dispersal for excluded species.
+#'
+#' @param NTotalK Total abundance across other patches.
+#' @param ri Intrinsic growth rate of focal species.
+#' @param a Interaction strength.
+#' @param SumN0j Total abundance of resident species.
+#'
+#' @return Density contribution per unit dispersal (Eq. 7).
 get_N1iExc <- function(NTotalK=10, ri=1, a=0.5, SumN0j){
   NTotalK/(a*SumN0j - ri)
 }
 
-# Eq. 29, SI
-#a = interaction strength
-#n and m: nr of species in the regional pool and in the focal patch
-#meanN1Exc = mean of N1iExc across species
-#meanrho = mean of rhoi across species
-#rhoi = rho for species i, given that it persists w/o dispersal
+## Eq. 29 (Supplementary Information)
+#' Density contribution of unit dispersal for persisting species.
+#'
+#' @param a Interaction strength.
+#' @param n Number of species in the regional pool.
+#' @param m Number of species in the focal patch.
+#' @param meanrho Mean rho across species.
+#' @param rhoi Rho of focal species.
+#' @param p Number of patches.
+#' @param meanN1Exc Mean N1 for excluded species.
+#'
+#' @return Density contribution per unit dispersal (Eq. 29).
 get_N1iPer <- function(a=0.5, n=4, m=1, meanrho, rhoi, p, meanN1Exc){
   (a*((1-a)*meanN1Exc*(n-m)+(m-1)*meanrho+(2-m)*rhoi) + (p-1)*(1-a) - rhoi)/
     ((1-a)*(a*(m-1)+1))
 }
 
-#Eq. 14, SI 
-#fraction of patches with m species in a metacommunity of n species
-#without dispersal. For m>1
+## Eq. 14 (Supplementary Information)
+#' Fraction of patches with m species (no dispersal).
+#'
+#' @param meanA Interaction strength.
+#' @param m Number of species in a patch.
+#' @param n Regional species pool size.
+#'
+#' @return Fraction of patches with m species (Eq. 14).
 get_fraction_m <- function(meanA=0.5, m=2, n=3, ...){
-  #n x n matrix
   A   <- diag(n) + meanA
   A   <- set_diagonal(A, 1)
   Am <- A %*% diag(c(rep(1,m),rep(0,n-m)))
-  #Am2<- diag(c(rep(1,m),rep(0,n-m))) %*% Am
   diag(Am) <- c(rep(1,m), rep(-1,n-m)) 
-  #diag(Am2)<- 1
-  B        <- diag(c(rep(1, n))) #constraints
+  B  <- diag(c(rep(1, n)))
   feas1combo <- 2^(n)*calculate_omega_constraint(A=Am, B=B)^(n)
   ifelse(m==1, NA, choose(n, m) * feas1combo)
 }
 
-#Application of Eq. 14 to make a distribution of nr of species in a patch in
-#case there is no dispersal
+## Application of Eq. 14 
+#' Distribution of species richness across patches.
+#'
+#' @param n Number of species.
+#' @param meanA Interaction strength.
+#'
+#' @return Vector of f(m) for m = 1,...,n.
 make_distribution <- function(n, meanA=0.5){
   probs <- NULL
   for (m in c(1:n))
-  {
     probs <- c(probs, get_fraction_m(meanA=meanA, m=m, n=n))
-  }
   probs
 }
 
-#Truncate a fitted probability density at a given quantile.
-#Truncates a discretized probability density function by removing either the
-#lower or upper tail beyond a specified quantile. This is useful for
-#restricting analyses to a central portion of a distribution.
-#pdfFitted is a list, containing components `x`
-#(evaluation points) and `y` (density values).
-#q is the quantile at which to truncate the distribution
-#ditch indicates the direction of truncation:
-#"down":Remove values below the `q` quantile (retain upper tail).
-#"up": Remove values above the `q` quantile (retain lower tail).
+## Truncate a discretized probability density.
+#'
+#' @param pdfFitted Output of density().
+#' @param q Quantile threshold.
+#' @param ditch Direction of truncation ("up" or "down").
+#'
+#' @return Truncated density.
 trunc_dist <- function(pdfFitted, q = 0.5, ditch = "up") {
-  # Discretize density to cumulative probability
   cumprob <- cumsum(pdfFitted$y) / sum(pdfFitted$y)
-  
-  # Identify indices to retain
-  if (ditch == "down") {
-    Qs <- which(cumprob >= q)
-  } else {
-    Qs <- which(cumprob <= q)
-  }
-  
-  list(
-    x = pdfFitted$x[Qs],
-    y = pdfFitted$y[Qs]
-  )
+  Qs <- if (ditch == "down") which(cumprob >= q) else which(cumprob <= q)
+  list(x=pdfFitted$x[Qs], y=pdfFitted$y[Qs])
 }
 
-#gets the mean of a truncated pdf
-#pdfFitted = output of trunc_dist()
-#q = quantile, where 1 = 100th quantile, 0.5 = 50th etc..
+## Mean of a truncated density.
+#'
+#' @param pdfFitted Output of trunc_dist().
+#' @param q Quantile threshold.
+#' @param ditch Direction of truncation.
+#'
+#' @return Mean of truncated distribution.
 get_mean_trunc <- function(pdfFitted, q=0.5, ditch="up"){
   pdfTrunc <- trunc_dist(pdfFitted, q=q, ditch=ditch)
   sum(pdfTrunc$x*pdfTrunc$y)/sum(pdfTrunc$y)
 }
 
-# Eq. 25, SI
-#x = factor to divide a*Nt by in order to get the mean
+## Eq. 25 (Supplementary Information)
+#' Mean intrinsic growth rate given local richness.
+#'
+#' @param a Interaction strength.
+#' @param m Local species richness.
+#' @param n Regional species pool size.
+#' @param r Mean intrinsic growth rate.
+#' @param x Scaling factor.
+#'
+#' @return Mean intrinsic growth rate (Eq. 25).
 get_RMeanM <- function(a=0.8, m=1, n=4, r=1.01, x=2){
   ((1 + a*(-1 + m))*n*r*x)/(m*(a*(n + m*(-1 + x) - x) + x)) 
-} 
+}
 
-#sample ri's from a truncated dist
-# PDF = a pdf, with $x the values and $y the density
-# cutoff = threshold for truncation
-# ditch = whether to ditch everything below or above
+## Sample intrinsic growth rates from truncated distribution.
+#'
+#' @param samplesize Number of samples.
+#' @param PDF Density with components x and y.
+#' @param cutoff Truncation threshold.
+#' @param ditch Direction ("below" or "above").
+#'
+#' @return Sampled intrinsic growth rate(s).
 sample_ri <- function(samplesize=1, PDF, cutoff, ditch="below", ...){
-  ditchBelow <- sample(x = PDF$x[which(PDF$x>cutoff)], size=1, 
-                       prob = PDF$y[which(PDF$x>cutoff)], replace = T)
-  ditchAbove <- sample(x = PDF$x[which(PDF$x<cutoff)], size=1, 
-                       prob = PDF$y[which(PDF$x<cutoff)], replace = T)
+  ditchBelow <- sample(PDF$x[PDF$x>cutoff], size=1, prob=PDF$y[PDF$x>cutoff], replace=T)
+  ditchAbove <- sample(PDF$x[PDF$x<cutoff], size=1, prob=PDF$y[PDF$x<cutoff], replace=T)
   (ditch=="below")*ditchBelow + (ditch=="above")*ditchAbove
 }
 
-# Get patch occupancy
-# Input:
-# -fm: fraction of patches with m coexisting species
-# -m: nr of coexisting species, in same order as fm
-# -probExc: probability for a species to persist if it does not persist without dispersal
-# -n: total number (i.e. number of regionally available) species
-# -Xi: feasibility for n species
+## Patch occupancy prediction.
+#'
+#' @param data Tibble with f(m).
+#' @param probExc Persistence probability given exclusion without dispersal.
+#' @param n Regional species pool size.
+#' @param Xi Feasibility for n species.
+#'
+#' @return Patch occupancy probability.
 get_patch_occupancy <- function(data, probExc, n, Xi, ...){
   data |>
     filter(m<n) |>
@@ -140,68 +172,52 @@ get_patch_occupancy <- function(data, probExc, n, Xi, ...){
     as_vector()
 }
 
-#Sample the random variables needed to predict patch occupancy
-#Input:
-# -data: a tibble with the number of species in a patch (m),
-# the total biomass (NTotal), given m, 
-# the mean growth rate of the persisting species (meanRPer),
-# the predicted fraction of patches in which m species persist
-#Output:
-# - samples: a tibble with samples for 
-# m, riExc (growth rate of sp excluded w/o disp), 
-# riPer (growth rate of sp persisting w/o disp),
-# N0i (density w/o disp of a sp persisting w/o disp)
-# N1iExc (contribution of a unit dispersal to density of a sp excluded w/o disp)
-# NegIGR (negative invasion growth rate of sp excluded w/o disp)
-# rhoi (ratio of local vs. mean regional abundance)
+## Sample random variables for patch occupancy prediction.
+#'
+#' @return Tibble of sampled quantities used in analytical predictions.
 sample_random <- function(data, sampleSize, meanA, NTotalKPredicted, p, ...){
-  tibble(m = sample(x=data$m, size=sampleSize, prob = data$fmPredicted, replace=T)) %>% #sample m according to f(m). Every sample is a hypothetical patch      
-    left_join(data, by="m", multiple="all") %>% #get variables that match the sampled m
-    select(all_of(c("m", "NTotalPredicted", "meanRPerPredicted", "meanRExcPredicted"))) %>%
-    rowwise() %>%       
-    #sample 1 growth rate per hypo patch, from distribution of R such that IGR<0 (for riExc) or >0 (for riPer) 
-    mutate(riExc=sample_ri(samplesize=1, PDF=pdfRs, cutoff=meanA*NTotalPredicted, ditch="above"),
-           riPer=sample_ri(samplesize=1, PDF=pdfRs, cutoff=meanA*NTotalPredicted, ditch="below")) %>%
+  tibble(m = sample(x=data$m, size=sampleSize, prob=data$fmPredicted, replace=T)) %>%
+    left_join(data, by="m", multiple="all") %>%
+    select(all_of(c("m","NTotalPredicted","meanRPerPredicted","meanRExcPredicted"))) %>%
+    rowwise() %>%
+    mutate(riExc=sample_ri(PDF=pdfRs, cutoff=meanA*NTotalPredicted, ditch="above"),
+           riPer=sample_ri(PDF=pdfRs, cutoff=meanA*NTotalPredicted, ditch="below")) %>%
     ungroup() %>%
-    mutate(N0i=get_N0i(a=meanA, n=m, r=meanRPerPredicted, ri=riPer), #predict density of persisting sp in absence of dispersal
-           N1iExc=get_N1iExc(NTotalK=NTotalKPredicted, ri=riExc, a=meanA, NTotalPredicted), #density contribution per unit of dispersal, in case of exclusion w/o dispersal
-           NegIGR=1/get_N1iExc(NTotalK=1, ri=riExc, a=meanA, NTotalPredicted), #negative IGR
-           rhoi = NTotalKPredicted/p*(p-1)/N0i)}
-
-# Samples random values for Ni (density of i with dispersal)
-# Input:
-# - samples: output from sample_random
-# - d (dispersal rate), meanA (mean comp. interaction strength),
-# - n (nr of sp), p (nr of patches)
-sample_random_Ni <- function(samples, d, meanA, n, p, ...){ 
-  samples |>
-    mutate(N1iPer = get_N1iPer(a=meanA, n=n, m=m, meanrho=meanrho, #N1i when i persists w/o disp.
-                               rhoi=rhoi, meanN1Exc=meanN1Exc, p=p), 
-           NiExc = d*N1iExc, #Ni when i is excluded w/o disp.
-           NiPer = N0i+d*N1iPer)}
- 
-#fit Bayesian glmm for priority effects, only pools with focal in spring
-fit_priority <- function(data, focal = "magna", 
-                           adapt_delta = 0.9, 
-                           warmup = 5000, iter = 7000) {
-  
-  # Build the fixed-effect part
-  form <- paste0(focal, "_summer_alone ~ as.factor(", focal, "_spring)")
-  
-  # Random-effects structure
-  form <- paste0(form, " + (1|island/pool) + (1|year)")  
-  
-  # Fit the model
-  brm(as.formula(form),
-    data   = data,
-    family = brms::bernoulli(),
-    control = list(adapt_delta = adapt_delta),
-    warmup = warmup,
-    iter = iter)
+    mutate(N0i=get_N0i(a=meanA, n=m, r=meanRPerPredicted, ri=riPer),
+           N1iExc=get_N1iExc(NTotalK=NTotalKPredicted, ri=riExc, a=meanA, NTotalPredicted),
+           NegIGR=1/get_N1iExc(NTotalK=1, ri=riExc, a=meanA, NTotalPredicted),
+           rhoi = NTotalKPredicted/p*(p-1)/N0i)
 }
 
-# Model printing for paper -----
-# The ... contain the variables to be selected apart from 'model'
+## Sample equilibrium density with dispersal.
+#'
+#' @return Tibble with Ni for excluded and persisting cases.
+sample_random_Ni <- function(samples, d, meanA, n, p, ...){ 
+  samples |>
+    mutate(N1iPer = get_N1iPer(a=meanA, n=n, m=m, meanrho=meanrho,
+                               rhoi=rhoi, meanN1Exc=meanN1Exc, p=p),
+           NiExc = d*N1iExc,
+           NiPer = N0i+d*N1iPer)
+}
+ 
+## Fit Bayesian GLMM for priority effects.
+#'
+#' @return Fitted brms model.
+fit_priority <- function(data, focal = "magna",
+                         adapt_delta = 0.9,
+                         warmup = 5000, iter = 7000) {
+  form <- paste0(focal, "_summer_alone ~ as.factor(", focal, "_spring)",
+                 " + (1|island/pool) + (1|year)")
+  brm(as.formula(form),
+      data = data,
+      family = brms::bernoulli(),
+      control = list(adapt_delta = adapt_delta),
+      warmup = warmup,
+      iter = iter)
+}
+
+## Model printing for paper 
+#' The ... contain the variables to be selected apart from 'model'
 print_model <- function(data, ...){
   test <- data |>
     ungroup() |>
