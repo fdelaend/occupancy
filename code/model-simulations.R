@@ -21,7 +21,7 @@ Sims <-
   } )))() %>%
   #Sample growth rates
   (\(x) mutate(x, R = pmap(x, make_R_spatial)))() %>%
-  #Make regular D matrix (representing well-mixed spatial network)
+  #Make regular D matrix (representing well-mixed landscape)
   (\(x) mutate(x, regularD = pmap(x, make_D)))() %>%
   #Make spatially-explicity D matrix (with exponential dispersal kernel)
   mutate(coords = map(p, ~make_randomCoords(nPatch=.x)), #generate coordinates for every patch
@@ -31,7 +31,7 @@ Sims <-
          exponentialD = map2(exponentialD, d, ~rescale_D(D=.x, d=.y))) %>% #and rescale to have same mean D as in regular case
   mutate(N0 = map(R, ~.x/10)) %>% #set initial conditions equal to carrying capacity w/o interactions or dispersal, divided by 10
   pivot_longer(cols = c("regularD","exponentialD"), names_to = "dispType", values_to = "D") %>% # pivot the two sorts of D matrices to make them a factor
-  #Simulate the network
+  #Simulate the landscape
   (\(x) mutate(x, NHat = pmap(x, get_NHat, .progress = TRUE)))() #, .progress = TRUE
 
 ## Summarize results ----
