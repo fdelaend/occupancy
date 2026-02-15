@@ -1,6 +1,3 @@
-library(grateful)
-library(xtable)
-library(broom.mixed)
 source("tools-other.R") # function to fit glmms for priority effects
 
 # Read and organise data ------------

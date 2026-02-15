@@ -1,4 +1,3 @@
-library(mvtnorm)
 library(tidyverse)
 library(brms)
 library(tidybayes)
@@ -10,6 +9,8 @@ library(patchwork)
 library(reticulate) #to run python code from R
 use_python("/usr/local/bin/python3.10") #load your preferred python version
 source_python("MVN.py")
+library(grateful)
+library(xtable)
 
 cbPalette <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", 
                "#0072B2", "#D55E00", "#CC79A7")#
