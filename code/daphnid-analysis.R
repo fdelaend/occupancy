@@ -1,6 +1,8 @@
 library(grateful)
 library(xtable)
 library(broom.mixed)
+library(geodist)
+library(sf)
 source("tools-other.R") # function to fit glmms for priority effects
 
 # Read and organise data ------------
@@ -8,15 +10,15 @@ source("tools-other.R") # function to fit glmms for priority effects
 ## Cluster data: List of islands and clusters they belong to -------
 cluster_measures <- read_csv("../daphnid-data/island-measures.csv") |>
   mutate(cluster = factor(group_100)) |>
-  select(cluster, island) 
+  select(cluster, island)
 
-## Spatial location of pools and nr of surrounding pools within cluster --------- 
+## Spatial location of pools and nr of surrounding pools within cluster ---------
 pool_coords <- read_csv("../daphnid-data/pool-coords.csv") |>
-  # Pool coordinates 
+  # Pool coordinates
   filter(!grepl("A", pool), !grepl("A", name)) |> #island present twice in the data
   select(island, pool, name, latitude_corr, longitude_corr) |>
-  # Add cluster info 
-  left_join(cluster_measures |> select(cluster, island), 
+  # Add cluster info
+  left_join(cluster_measures |> select(cluster, island),
             by = "island") |>
   group_by(cluster) |>
   nest() |>
@@ -38,7 +40,7 @@ daphnids          <- read_csv("../daphnid-data/daphnid-counts.csv") |>
   filter(!grepl("A", pool), !grepl("A", poolname)) |> #islands present twice in the data
   drop_na() |>
   left_join(cluster_measures, by = join_by(island)) |>
-  left_join(pool_coords, by = join_by(cluster, island, pool), 
+  left_join(pool_coords, by = join_by(cluster, island, pool),
             relationship = "many-to-many") |>
   #compute daphnid richness
   mutate(richness = magna + longispina + pulex)
@@ -46,8 +48,8 @@ daphnids          <- read_csv("../daphnid-data/daphnid-counts.csv") |>
 ## Desiccation data ---------
 desiccation        <- tibble(name = unique(pool_coords$name)) |>
   expand_grid(year = c(min(daphnids$year):max(daphnids$year))) |>
-  left_join(read_csv("../daphnid-data/desiccation.csv"), 
-            by = join_by(name == pool, year)) |> 
+  left_join(read_csv("../daphnid-data/desiccation.csv"),
+            by = join_by(name == pool, year)) |>
   separate_wider_delim(name, delim = "-", names = c("island", "pool")) |>
   left_join(cluster_measures, by="island") |>
   # desiccation is a cluster-level predictor, computed as the mean across pools within a cluster
@@ -65,7 +67,7 @@ daphnids_des <- daphnids |>
   mutate(sample = if_else(sample == 1, "spring", "summer"),
          monos = as.factor(if_else(richness==1, "present", "absent")),
          pairs = as.factor(if_else(richness==2, "present", "absent")),
-         triplets = as.factor(if_else(richness==3, "present", "absent"))) 
+         triplets = as.factor(if_else(richness==3, "present", "absent")))
 
 # Statistics ----------
 # Remove triplets bc extremely rare: 21 out of 6297 occurrences of non-empty pools (0.33%):
@@ -79,14 +81,14 @@ daphnids_des <- daphnids_des |>
 ## Priority effects ------
 ### Prep data ------
 data_priority <- daphnids_des |>
-  # filter data: only isolated pools in which a single species 
-  # was present in spring. Pick some value of b, not important, because not used. 
+  # filter data: only isolated pools in which a single species
+  # was present in spring. Pick some value of b, not important, because not used.
   filter(!(sample == "spring" & richness != 1),
          b == 100, nr_pools_within < 20) |>
   select(year, sample, island, cluster, pool, latitude_corr, longitude_corr,
          magna, longispina, pulex) |>
   # create variables that code for presence of a sp in a season
-  pivot_wider(names_from = sample, 
+  pivot_wider(names_from = sample,
               values_from = c(magna, longispina, pulex)) |>
   drop_na() |>
   #create variables that code for presence of a sp in summer w/o other sp being present
@@ -101,9 +103,9 @@ all_species <- c("magna", "longispina", "pulex")
 
 ### Model fitting --------
 models_priority <- tibble(focal = all_species) |>
-  mutate(model = map(focal, 
+  mutate(model = map(focal,
                      ~ fit_priority(focal = .x, adapt_delta = 0.999,
-                                      data = data_priority))) 
+                                      data = data_priority)))
 
 saveRDS(models_priority, "../data/models_priority.RDS")
 models_priority <- readRDS("../data/models_priority.RDS")
@@ -123,47 +125,47 @@ models_priority |>
   select(!model) |>
   unnest(draws) |>
   pivot_longer(2:6, names_to = "parameter", values_to = "value") |>
-  ggplot() + 
-  aes(x = value, y = focal, fill = parameter) + 
+  ggplot() +
+  aes(x = value, y = focal, fill = parameter) +
   stat_halfeye(alpha = 0.6, slab_color = NA) +
   #facet_wrap(~ parameter, scales = "free_x") +
   theme_bw()
-  
-ggsave(filename = "../figures/priority.pdf", 
+
+ggsave(filename = "../figures/priority.pdf",
        width=5, height = 3, device = "pdf")
 #comparison w out of the box solution
-#mcmc_areas(models_priority$model[[3]], 
+#mcmc_areas(models_priority$model[[3]],
 #           pars = colnames(as.matrix(models_priority$model[[3]]))[1:5])
 
 ### Model checking --------
 test <- models_priority |>
   mutate(ppc_draws = map(model, ~posterior_predict(.x)))
 
-p1 <- ppc_dens_overlay(y = data_priority$magna_summer_alone, 
-                 yrep = test$ppc_draws[[1]][1:100, ]) + 
-  labs(title = "magna") 
-p2 <- ppc_dens_overlay(y = data_priority$longispina_summer_alone, 
+p1 <- ppc_dens_overlay(y = data_priority$magna_summer_alone,
+                 yrep = test$ppc_draws[[1]][1:100, ]) +
+  labs(title = "magna")
+p2 <- ppc_dens_overlay(y = data_priority$longispina_summer_alone,
                  yrep = test$ppc_draws[[2]][1:100, ]) +
-  labs(title = "longispina") 
-p3 <- ppc_dens_overlay(y = data_priority$pulex_summer_alone, 
+  labs(title = "longispina")
+p3 <- ppc_dens_overlay(y = data_priority$pulex_summer_alone,
                  yrep = test$ppc_draws[[3]][1:100, ]) +
   labs(title = "pulex")
 
-(p1 | p2 | p3) 
+(p1 | p2 | p3)
 
 ggsave("../figures/check_priority.pdf",
-       width=8, height = 3, device = "pdf")                 
+       width=8, height = 3, device = "pdf")
 
 ### Model printing -----
 print_model(models_priority, focal)
-                               
+
 ## Proportion of pairs -----
 ### Model fitting ------
 models_prop <- daphnids_des |>
   group_by(sample, b) |>
   nest() |>
   mutate(model = map(data, ~ brm(pairs ~ nr_pools_within + desiccation_dynamic +
-                                      (1|island/pool) + (1|year), data = .x, 
+                                      (1|island/pool) + (1|year), data = .x,
                                  family = brms::bernoulli(),
                                  control = list(adapt_delta = 0.999),
                                  warmup = 6000,
@@ -189,33 +191,33 @@ models_prop |>
   select(!model & !data) |>
   unnest(draws) |>
   pivot_longer(3:8, names_to = "parameter", values_to = "value") |>
-  ggplot() + 
-  aes(x = value, y = as.factor(b), fill = parameter) + 
+  ggplot() +
+  aes(x = value, y = as.factor(b), fill = parameter) +
   stat_halfeye(alpha = 0.6, slab_color = NA) +
-  facet_grid(sample~parameter, 
+  facet_grid(sample~parameter,
              scales = "free") +
   theme_bw() +
   labs(y = "b")
 
-ggsave(filename = "../figures/proportion.pdf", 
+ggsave(filename = "../figures/proportion.pdf",
        width=12, height = 3, device = "pdf")
 
 #### Fixed effect -------
 # prediction grid across nr_pools_within
 new_data <- tibble(nr_pools_within = seq(1, 100,
-    length.out = 200), 
+    length.out = 200),
     desiccation_dynamic = mean(daphnids_des$desiccation_dynamic, na.rm = TRUE))
 
 # summary of observed data
 daphnids_des_summary <- daphnids_des |>
-  summarise(p_mean = mean(richness==2, na.rm=T), 
+  summarise(p_mean = mean(richness==2, na.rm=T),
             nr_pools_within = mean(nr_pools_within),
             .by = c(year, sample, b, cluster))
 
 test <- models_prop |>
   select(!data) |>
   # population-level predicted probabilities
-  mutate(ep = map(model, ~ posterior_epred(.x, newdata = new_data, 
+  mutate(ep = map(model, ~ posterior_epred(.x, newdata = new_data,
                                            re_formula = NA))) |>
   mutate(
     pred = map(ep, \(m) {
@@ -234,15 +236,15 @@ test <- models_prop |>
 
 ggplot(test, aes(x = nr_pools_within, y = p_mean, col = as.factor(b))) +
   scale_color_viridis_d(option="plasma", end=0.9) +
-  geom_ribbon(aes(ymin = p_lo, ymax = p_hi, col = as.factor(b)), 
+  geom_ribbon(aes(ymin = p_lo, ymax = p_hi, col = as.factor(b)),
               alpha = 0.25, lwd=0.3) +
   geom_line() +
   facet_wrap(.~ sample) +
-  labs(x = "nr of nearby pools", y = "Predicted probability", 
+  labs(x = "nr of nearby pools", y = "Predicted probability",
        col = "distance (m)") +
   theme_bw()
 
-ggsave(filename = "../figures/proportion_nearby.pdf", 
+ggsave(filename = "../figures/proportion_nearby.pdf",
        width=6, height = 3, device = "pdf")
 
 ### Model checking --------
@@ -252,18 +254,18 @@ test <- models_prop |>
 for (b in c(50, 100)){
   for (sample in c("spring", "summer")) {
     index <- which((test$b==b)&(test$sample==sample))
-    p <- ppc_dens_overlay(y = (test$data[[index]]$pairs=="present")*1, 
-                          yrep = test$ppc_draws[[index]][1:100, ]) + 
+    p <- ppc_dens_overlay(y = (test$data[[index]]$pairs=="present")*1,
+                          yrep = test$ppc_draws[[index]][1:100, ]) +
       labs(title = paste("b=", b, "; sample = ", sample))
     assign(paste0("b",b,sample), p)
   }
 }
 
 
-(b50spring | b50summer)/(b100spring | b100summer) 
+(b50spring | b50summer)/(b100spring | b100summer)
 
 ggsave("../figures/check_prop.pdf",
-       width=6, height = 5, device = "pdf")        
+       width=6, height = 5, device = "pdf")
 
 ### Model printing -------------
 print_model(models_prop, sample, b)
@@ -287,15 +289,15 @@ coordinates(data) <- ~ latitude_corr + longitude_corr  # Define spatial coordina
 
 for (i in 1:nrow(daphnids_des_models)) {
   model <- daphnids_des_models$model[[i]]
-  sim <- simulateResiduals(fittedModel = model, 
+  sim <- simulateResiduals(fittedModel = model,
                            plot = F, use.u = T)
-  
-  pdf(paste0("../figures/", i, "-resid-qq-prior.pdf"), 
+
+  pdf(paste0("../figures/", i, "-resid-qq-prior.pdf"),
       width = 8, height = 5)
-  plot(sim) 
+  plot(sim)
   dev.off()
-  
-  pdf(paste0("../figures/", i, "-resid-prior.pdf"), 
+
+  pdf(paste0("../figures/", i, "-resid-prior.pdf"),
       width = 8, height = 5)
   par(mfrow = c(1, 2))
   plotResiduals(sim, as.factor(data$year))
@@ -304,7 +306,7 @@ for (i in 1:nrow(daphnids_des_models)) {
   data$res <- residuals(sim)
   variog <- variogram(res ~ 1, data)
   plot(variog$dist, variog$gamma, main = "variogram",
-       xlab = "distance", ylab = "semivariance", 
+       xlab = "distance", ylab = "semivariance",
        ylim = c(0, max(variog$gamma)))
   dev.off()
 }
@@ -335,7 +337,7 @@ daphnids_des_models_plot <- daphnids_des_models |>
   #mutate(group = factor(group, levels = c(0, 1),
 #                     labels = c("no", "yes")))
 
-ggplot(daphnids_des_models_plot, 
+ggplot(daphnids_des_models_plot,
        aes(x = factor(x), y = predicted)) + #,
   #colour = group, group = group
   #scale_colour_manual(values = c("grey50", "black")) +
@@ -344,22 +346,22 @@ ggplot(daphnids_des_models_plot,
   geom_errorbar(aes(ymin = conf.low, ymax = conf.high),
                 width = 0.1,
                 position = position_dodge(width = 0.3)) +
-  scale_y_continuous("P(focal sp. alone in summer)", 
+  scale_y_continuous("P(focal sp. alone in summer)",
                      limits = c(0, 1)) +
-  scale_x_discrete("Focal sp. alone in spring", 
+  scale_x_discrete("Focal sp. alone in spring",
                    labels = c("0" = "no", "1" = "yes")) +
   #scale_colour_discrete("Other sp. in spring") +
-  theme_bw() + 
+  theme_bw() +
   facet_grid(.~focal) #+
   #labs(col = "Other sp. in spring")
 
-ggsave(filename = "../figures/priority.pdf", 
+ggsave(filename = "../figures/priority.pdf",
        width=5, height = 2, device = "pdf")
 
 ## Alternative option: -----
-# focus only on isolates ponds, 
-# that have a single sp in spring and either 
-# another sp (exclusion) or both sp (coex) in summer. 
+# focus only on isolates ponds,
+# that have a single sp in spring and either
+# another sp (exclusion) or both sp (coex) in summer.
 # Model the occurrence of both events.
 
 daphnids_des_alt <- daphnids_des |>
@@ -367,10 +369,10 @@ daphnids_des_alt <- daphnids_des |>
   filter(richness > 0, richness < 3, keep == 1,
          b == 100, nr_pools_within < 20) |>
   select(richness, year, sample, island, cluster, poolname, latitude_corr, longitude_corr,
-         magna, longispina, pulex) 
+         magna, longispina, pulex)
 
 data <- daphnids_des_alt |>
-  pivot_wider(names_from = sample, 
+  pivot_wider(names_from = sample,
               values_from = c(magna, longispina, pulex)) |>
   drop_na() |>
   mutate(obs = row_number()) |>
@@ -411,16 +413,16 @@ for (i in 1:nrow(daphnids_des_models)) {
   data <- daphnids_des_models$data[[i]] |>
     rename(desiccation = desiccation_dynamic,
            `nr of pools` = nr_pools_within)
-  
-  sim <- simulateResiduals(fittedModel = model, 
+
+  sim <- simulateResiduals(fittedModel = model,
                            plot = F, use.u = T)
-  
-  pdf(paste0("../figures/", i, "-resid-qq.pdf"), 
+
+  pdf(paste0("../figures/", i, "-resid-qq.pdf"),
       width = 8, height = 5)
-  plot(sim) 
+  plot(sim)
   dev.off()
-  
-  pdf(paste0("../figures/", i, "-resid.pdf"), 
+
+  pdf(paste0("../figures/", i, "-resid.pdf"),
       width = 10, height = 9)
   par(mfrow = c(2, 3))
   plotResiduals(sim, as.factor(data$year))
@@ -435,7 +437,7 @@ for (i in 1:nrow(daphnids_des_models)) {
   data$res <- residuals(sim)
   variog <- variogram(res ~ 1, data)
   plot(variog$dist, variog$gamma, main = "variogram",
-       xlab = "distance", ylab = "semivariance", 
+       xlab = "distance", ylab = "semivariance",
        ylim = c(0, max(variog$gamma)))
   dev.off()
 }
@@ -461,7 +463,7 @@ daphnids_des_models |>
 
 ### Plot ----
 daphnids_des_plot <- daphnids_des_models |>
-  mutate(data = map2(data, model3, ~ .x |> 
+  mutate(data = map2(data, model3, ~ .x |>
                        mutate(preds = predict(.y, type="response")))) |>
   select(!contains("model")) |>
   unnest(data) |>
@@ -477,27 +479,27 @@ daphnids_des_plot <- daphnids_des_models |>
 ggplot(daphnids_des_plot) +
   theme_bw() +
   scale_color_viridis_d(option="plasma", end=0.9) +
-  aes(x = p, y = prop, 
+  aes(x = p, y = prop,
       col = as.factor(b),
       weight = n) + # Weight for the logistic regression on proportions
-  geom_point(alpha = 0.2, show.legend = FALSE) + 
-  geom_point(shape = 1, alpha = 0.5, show.legend = FALSE) + 
+  geom_point(alpha = 0.2, show.legend = FALSE) +
+  geom_point(shape = 1, alpha = 0.5, show.legend = FALSE) +
   geom_smooth(aes(group = as.factor(b)), # White border to highlight lines
-              method = "glm", 
+              method = "glm",
               method.args = list(family = binomial(link = "logit")),
-              se = F, 
-              color = "white", 
+              se = F,
+              color = "white",
               lwd = 1.4,
               lineend='round') +  # Round edge of lines
-  geom_smooth(method = "glm", 
+  geom_smooth(method = "glm",
               method.args = list(family = binomial(link = "logit")),
               se = F,
               lineend='round',
               lwd = 0.8) +
-  labs(x="mean nr of pools within distance, by cluster", 
-       y = "proportion of cluster pools with pairs", 
+  labs(x="mean nr of pools within distance, by cluster",
+       y = "proportion of cluster pools with pairs",
        col = "distance (m)") +
-  facet_grid(.~sample, labeller = label_both) 
+  facet_grid(.~sample, labeller = label_both)
 
-ggsave(filename = "../figures/glm.pdf", 
+ggsave(filename = "../figures/glm.pdf",
        width=5, height = 3, device = "pdf")
