@@ -16,4 +16,4 @@
 ml purge
 ml R
 
-Rscript model-simulations.R $SLURM_ARRAY_TASK_ID
+Rscript model-simulations-daphnids.R $SLURM_ARRAY_TASK_ID
