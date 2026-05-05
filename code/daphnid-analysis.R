@@ -121,6 +121,7 @@ models_priority |>
   unnest(draws) |>
   pivot_longer(2:6, names_to = "parameter", values_to = "value") |>
   ggplot() + 
+  scale_fill_manual(values = cbPalette) + 
   aes(x = value, y = focal, fill = parameter) + 
   stat_halfeye(alpha = 0.6, slab_color = NA) +
   #facet_wrap(~ parameter, scales = "free_x") +
@@ -188,12 +189,14 @@ models_prop |>
   unnest(draws) |>
   pivot_longer(3:8, names_to = "parameter", values_to = "value") |>
   ggplot() + 
+  scale_fill_manual(values = cbPalette) + 
   aes(x = value, y = as.factor(b), fill = parameter) + 
   stat_halfeye(alpha = 0.6, slab_color = NA) +
   facet_grid(sample~parameter, 
              scales = "free") +
   theme_bw() +
-  labs(y = "b")
+  labs(y = "distance (m)", x = "parameter value") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
 
 ggsave(filename = "../figures/proportion.pdf", 
        width=12, height = 3, device = "pdf")
