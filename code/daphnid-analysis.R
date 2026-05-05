@@ -124,6 +124,7 @@ models_priority |>
   aes(x = value, y = focal, fill = parameter) + 
   stat_halfeye(alpha = 0.6, slab_color = NA) +
   #facet_wrap(~ parameter, scales = "free_x") +
+  labs(x = "parameter value", y= "focal species") +
   theme_bw()
   
 ggsave(filename = "../figures/priority.pdf", 
