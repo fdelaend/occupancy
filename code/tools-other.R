@@ -11,6 +11,11 @@ use_python("/usr/local/bin/python3.10") #load your preferred python version
 source_python("MVN.py")
 library(grateful)
 library(xtable)
+library(geodist)
+library(sf)
+library(rnaturalearthdata)
+library(ggspatial)
+library(cowplot)
 
 cbPalette <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", 
                "#0072B2", "#D55E00", "#CC79A7")#

@@ -29,6 +29,56 @@ pool_coords <- read_csv("../daphnid-data/pool-coords.csv") |>
   # unnest
   unnest(data)
 
+## Plot of pool locations ------
+pool_map <- pool_coords %>%
+  st_as_sf(coords = c("longitude_corr", "latitude_corr"), crs = 4326) %>%
+  mutate(cluster = factor(cluster))
+
+# Finland outline
+finland <- ne_countries(country = "Finland", scale = "medium", returnclass = "sf")
+
+# Use a projected CRS suitable for Finland
+pool_map_proj <- st_transform(pool_map, 3067)
+finland_proj <- st_transform(finland, 3067)
+
+# Main map extent: buffer around your points
+bbox <- st_bbox(
+  st_buffer(st_union(pool_map_proj), dist = 200)   # buffer in meters
+)
+
+main_map <- ggplot() +
+  geom_sf(data = finland_proj, fill = "grey95", color = "grey70") +
+  geom_sf(data = pool_map_proj, aes(color = cluster), size = 1, alpha = 0.9) +
+  coord_sf(
+    xlim = c(bbox["xmin"], bbox["xmax"]),
+    ylim = c(bbox["ymin"], bbox["ymax"]),
+    expand = FALSE) +
+  scale_colour_manual(values = cbPalette) + 
+  annotation_scale(location = "bl", width_hint = 0.3) +
+  annotation_north_arrow(location = "tl", style = north_arrow_fancy_orienteering) +
+  theme_minimal() +
+  labs(color = "Cluster", x = NULL, y = NULL)
+
+# Inset map of Finland with your region marked
+region_box <- st_as_sfc(st_bbox(pool_map_proj)) %>% st_buffer(10000)
+
+inset_map <- ggplot() +
+  geom_sf(data = finland_proj, fill = "grey95", color = "grey70", linewidth = 0.3) +
+  geom_sf(data = region_box, fill = NA, color = "black", linewidth = 1) +
+  theme_void() +
+  theme(plot.background = element_rect(fill = "white",
+                                       color = "black",
+                                       linewidth = 0.8),
+        plot.margin = margin(4, 4, 4, 4))
+
+# Combine main map + inset
+ggdraw(main_map) +
+  draw_plot(inset_map, 
+            x = 0.5, y = 0.15, width = 0.28, height = 0.2)
+
+ggsave(filename = "../figures/map.pdf", 
+       width=5, height = 6, device = "pdf")
+
 ## Daphnid data -------
 # Read Daphnid data and join cluster info and nr of pools within "b"
 daphnids          <- read_csv("../daphnid-data/daphnid-counts.csv") |>
