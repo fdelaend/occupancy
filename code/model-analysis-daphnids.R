@@ -22,7 +22,7 @@ SimsSum <- Sims |>
             meanProb2 = mean(propPatches2, na.rm = T), 
             sdProb2 = sd(propPatches2, na.rm = T), 
             .by = c(n, meanA, d, vary, k, cvA, p, dispType)) |>
-  mutate(k = if_else(k==1, "Equivalence", "No equivalence"))
+  mutate(k = if_else(k==1, "Equivalence", "Inequivalence"))
 
 #Plot -----
 # choice of d range based on Dubart. Max of about 10e-4. 

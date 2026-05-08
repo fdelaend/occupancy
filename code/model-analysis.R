@@ -163,7 +163,7 @@ SimsSum <- Sims |>
   summarise(meanProb = mean(propPatchesN, na.rm = T), 
             sdProb = sd(propPatchesN, na.rm = T), 
             .by = c(n, meanA, d, vary, k, cvA, p, dispType)) |>
-  mutate(k = if_else(k==1, "Equivalence", "No equivalence"))
+  mutate(k = if_else(k==1, "Equivalence", "Inequivalence"))
 
 #Plot for when all assumptions are met -----
 ggplot(SimsSum |>
