@@ -8,7 +8,7 @@ Sims <-
   expand_grid(n = c(3), meanA = c(1), #, 6; 0.4, 0.4, 0.6,
               d = c(seq(-6, -4, length.out=6)),
               vary=c(0, 0.1), k=c(1, 1.5),
-              cvA = c(1e-2, 0.2), p = seq(2, 100, 5), 
+              cvA = c(1e-2, 0.2), p = seq(3, 100, 5), 
               rep = parallel_id) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
   #Make parameters: d, sdA
   mutate(d = 10^d,
