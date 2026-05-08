@@ -6,9 +6,10 @@ parallel_id <- Sys.getenv('SLURM_ARRAY_TASK_ID') # Get task ID from the cluster
 ## Simulations ------
 Sims <-
   expand_grid(n = c(3), meanA = c(1), #, 6; 0.4, 0.4, 0.6,
-              d = c(seq(-6, -1, length.out=12)),
+              d = c(seq(-6, -4, length.out=6)),
               vary=c(0, 0.1), k=c(1, 1.5),
-              cvA = c(1e-2, 0.2), p = seq(10, 100, 10), rep = parallel_id) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
+              cvA = c(1e-2, 0.2), p = seq(1, 100, 5), 
+              rep = parallel_id) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
   #Make parameters: d, sdA
   mutate(d = 10^d,
          sdA = cvA * meanA) %>%
@@ -40,7 +41,8 @@ results <- Sims %>%
   #1/ Summarize the simulated data: per m, compute the nr of patches and total biomass of an average patch
   (\(x) mutate(x, summaryM = pmap(x, summarize_ode)))() %>%
   #2/proportion of patches in which all n species persist
-  mutate(propPatchesN = 1/p*map2_dbl(summaryM, n, ~ (.x %>% filter(m==.y))$nrPatches)) %>%
+  mutate(propPatchesN = 1/p*map2_dbl(summaryM, n, ~ (.x %>% filter(m==.y))$nrPatches),
+         propPatches2 = 1/p*map_dbl(summaryM, ~ (.x |> filter(m==2))$nrPatches)) %>%
   #3/total density across all patches of a species
   mutate(NTotalK = map(NHat, ~ .x %>%
                          summarize(NTotalK = sum(value), 

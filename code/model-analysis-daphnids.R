@@ -16,8 +16,7 @@ Sims <- readRDS(file="../simulated-data/simulated-data-daphnids/all-data.RDS")
 # Summarize simulated data -----
 SimsSum <- Sims |> 
   select(all_of(c("n", "meanA", "d", "vary", "k", 
-                  "cvA", "p", "dispType", "summaryM", "propPatchesN"))) |>
-  mutate(propPatches2 = 1/p*map_dbl(summaryM, ~ (.x |> filter(m==2))$nrPatches)) |>
+                  "cvA", "p", "dispType", "summaryM", "propPatchesN", "propPatches2"))) |>
   summarise(meanProb = mean(propPatchesN, na.rm = T), 
             sdProb = sd(propPatchesN, na.rm = T), 
             meanProb2 = mean(propPatches2, na.rm = T), 
