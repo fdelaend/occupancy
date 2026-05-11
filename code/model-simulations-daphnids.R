@@ -5,11 +5,11 @@ parallel_id <- Sys.getenv('SLURM_ARRAY_TASK_ID') # Get task ID from the cluster
 # SIMULATIONS ----
 ## Simulations ------
 Sims <-
-  expand_grid(n = c(3), meanA = c(1), #, 6; 0.4, 0.4, 0.6,
-              d = c(seq(-6, -4, length.out=6)),
-              vary=c(0, 0.1), k=c(1, 1.5),
-              cvA = c(1e-2, 0.2), p = seq(3, 100, 5), 
-              rep = parallel_id) %>% #nr of species, mean and cv of a, nr of patches in landscape; nr of reps
+  expand_grid(n = c(3), meanA = c(1, 1.2, 1.4), #preemptive competition, representative for Daphnid system
+              d = c(seq(-6, -4, length.out=6)), #dispersal rate estimations based on Dubart
+              vary=c(0, 0.1, 0.2, 0.3), k=c(1, 1.2, 1.4), #uncertain about spatial variation of interactions or regional inequality
+              cvA = c(1e-2, 0.2), p = seq(3, 100, 5), # uncertain about the CV of species interactions; nr of patches as in Daphnid system
+              rep = parallel_id) %>% 
   #Make parameters: d, sdA
   mutate(d = 10^d,
          sdA = cvA * meanA) %>%
@@ -25,8 +25,8 @@ Sims <-
   #Make regular D matrix (representing well-mixed landscape)
   (\(x) mutate(x, regularD = pmap(x, make_D)))() %>%
   #Make spatially-explicity D matrix (with exponential dispersal kernel)
-  mutate(coords = map(p, ~make_randomCoords(nPatch=.x)), #generate coordinates for every patch
-         distances = map(n, ~seq(4,0.5, length.out=.x))) %>% #generate characteristic distances of the species
+  mutate(coords = map(p, ~make_randomCoords(nPatch=.x)), #generate coordinates for every patch, representative for Daphnid system
+         distances = map(n, ~seq(0.1,0.5, length.out=.x))) %>% #generate characteristic distances of the species; representative for clustered dispersal
   mutate(exponentialD = map2(coords, distances, ~dispMatrixCommunityExp(coords=.x, #Make a D matrix for exponential decay
                                                                         dispDistanceVector=.y)),
          exponentialD = map2(exponentialD, d, ~rescale_D(D=.x, d=.y))) %>% #and rescale to have same mean D as in regular case

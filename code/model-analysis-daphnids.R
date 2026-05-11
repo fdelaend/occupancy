@@ -28,12 +28,11 @@ SimsSum <- Sims |>
 # choice of d range based on Dubart. Max of about 10e-4. 
 # Only when d gets at the higher end: p has negative effect.
 ggplot(SimsSum |>
-         filter(vary > 0, cvA == 0.2, 
-                log10(d) > -6, log10(d)< -4)) + 
+         filter(vary > 0, cvA == 0.01)) + 
   theme_bw() +
   scale_colour_gradient(low = "grey85", high = "black") +
   theme(panel.grid = element_blank()) +
-  geom_line(aes(x=p, y=meanProb2, col = log10(d),
+  geom_line(aes(x=p, y=meanProb, col = log10(d),
                 group = log10(d))) +
   facet_grid(k~dispType) +
   labs(col=expression(paste("dispersal rate, log"[10],"(d)")), 
