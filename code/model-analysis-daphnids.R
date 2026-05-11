@@ -21,18 +21,18 @@ SimsSum <- Sims |>
             sdProb = sd(propPatchesN, na.rm = T), 
             meanProb2 = mean(propPatches2, na.rm = T), 
             sdProb2 = sd(propPatches2, na.rm = T), 
-            .by = c(n, meanA, d, vary, k, cvA, p, dispType)) |>
-  mutate(k = if_else(k==1, "Equivalence", "Inequivalence"))
+            .by = c(n, meanA, d, vary, k, cvA, p, dispType))# |>
+  #mutate(k = if_else(k==1, "Equivalence", "Inequivalence"))
 
 #Plot -----
 # choice of d range based on Dubart. Max of about 10e-4. 
 # Only when d gets at the higher end: p has negative effect.
 ggplot(SimsSum |>
-         filter(vary > 0, cvA == 0.01)) + 
+         filter(meanA == 1.2, cvA == 0.01, vary == 0.1)) + 
   theme_bw() +
   scale_colour_gradient(low = "grey85", high = "black") +
   theme(panel.grid = element_blank()) +
-  geom_line(aes(x=p, y=meanProb, col = log10(d),
+  geom_line(aes(x=p, y=meanProb2, col = log10(d),
                 group = log10(d))) +
   facet_grid(k~dispType) +
   labs(col=expression(paste("dispersal rate, log"[10],"(d)")), 
