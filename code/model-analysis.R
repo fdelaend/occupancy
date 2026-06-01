@@ -67,7 +67,7 @@ NtotalK <- ggplot(Predictions_NK |>
   geom_tile(aes(x=meanA, fill=log10(meanNTotalKPredicted), 
                 y=p), colour = "NA") +
   labs(x="interaction strength, a", y = "nr of patches, p", 
-       fill=expression(paste("log"[10],"(", Sigma[{k}],"N"[{"0,i"}]^{(k)}, ")"))) +
+       fill=expression(paste("log"[10],"(", Sigma[{k}],hat(N)[{"0,i"}]^{(k)}, ")"))) +
   theme(legend.position="bottom")
 
 # Predict probability to persist when excluded w/o dispersal -----
@@ -105,7 +105,7 @@ probExc <- ggplot(Predictions |>
   geom_tile(color = NA) +
   #geom_point() +
   labs(x=expression(paste("dispersal rate, log"[10],"(d)")), 
-       fill=expression(paste("P(N"[i],">0 | N"["0i"],"=0)")),
+       fill=expression(paste("P(",hat(N)[i],">",10^{-3}," | ",hat(N)["0i"],"=0)")),
        y="nr of patches, p") + 
   facet_grid(.~meanA, 
              labeller = label_bquote(cols=paste("a = ",.(meanA)))) +
@@ -129,7 +129,7 @@ NegIGR <- Predictions_IGR |>
        y="probability density", col="a") +
   theme(legend.position="bottom")
 
-# Recreate Fig 1 ----
+# Fig 1 ----
 case1 <- (NtotalK | NegIGR) / probExc + plot_annotation(tag_levels = "A") 
 
 ggsave(paste0("../figures/case1.pdf"), case1, 
@@ -165,7 +165,7 @@ SimsSum <- Sims |>
             .by = c(n, meanA, d, vary, k, cvA, p, dispType)) |>
   mutate(k = if_else(k==1, "Equivalence", "Inequivalence"))
 
-#Plot for when all assumptions are met -----
+#Fig 2: Plot for when all assumptions are met -----
 ggplot(SimsSum |>
          filter(dispType == "regularD", meanA < 1, 
                 d < 1e-2, 
@@ -186,7 +186,7 @@ ggplot(SimsSum |>
 ggsave(paste0("../figures/patch-occupancy-met.pdf"), 
        width=6, height = 3, device = "pdf")  
 
-#Plot for when assumptions are not met ------
+#Fig 3: Plot for when assumptions are not met ------
 ggplot(SimsSum |> filter(dispType == "exponentialD", 
                          vary > 0, cvA == 0.2)) + 
   theme_bw() +

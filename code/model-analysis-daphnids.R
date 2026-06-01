@@ -32,7 +32,7 @@ SimsSum_realistic <- SimsSum |>
   filter(all(meanProb < 0.01)) |>
   ungroup()
 
-#Plot -----
+#Fig 7: Plot vs. p -----
 ggplot(SimsSum_realistic |> 
          filter(dispType == "exponentialD")) + # "exponentialD"
   theme_bw() +
@@ -42,11 +42,26 @@ ggplot(SimsSum_realistic |>
   geom_point() +
   facet_grid(k~cvA, 
              labeller = label_bquote(cols = paste(cv(a), " = ", .(cvA)))) + #k, cvA, dispType
-  #geom_smooth(se=FALSE) +
   labs(col=expression(paste(bar(a))), 
        x="nr. of patches, p", y="patch occupancy of pairs when n=3")
 
 ggsave(paste0("../figures/patch-occupancy-daphnids.pdf"), 
        width=6, height = 6, device = "pdf")  
 
+#Fig 8: Plot vs. d -----
+ggplot(SimsSum_realistic |> 
+         filter(dispType == "exponentialD")) + # "exponentialD"
+  theme_bw() +
+  scale_colour_viridis_c(option="plasma", end=0.9) +
+  theme(panel.grid = element_blank()) +
+  aes(x=as.factor(log10(d)), y=meanProb2, col = meanA,
+      group = interaction(log10(d), meanA)) +
+  geom_boxplot() +
+  facet_grid(k~cvA, 
+             labeller = label_bquote(cols = paste(cv(a), " = ", .(cvA)))) + #k, cvA, dispType
+  labs(col=expression(paste(bar(a))), 
+       x=expression(paste("dispersal rate, log"[10],"(d)")), 
+       y="patch occupancy of pairs when n=3")
 
+ggsave(paste0("../figures/patch-occupancy-daphnids-d.pdf"), 
+       width=6, height = 6, device = "pdf")  

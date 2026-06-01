@@ -1,5 +1,6 @@
 library(tidyverse)
 library(brms)
+library(broom.mixed)
 library(tidybayes)
 library(bayesplot)
 library(pracma)
@@ -14,13 +15,13 @@ library(xtable)
 library(geodist)
 library(sf)
 library(rnaturalearthdata)
+library(rnaturalearth)
 library(ggspatial)
 library(cowplot)
 
 cbPalette <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", 
                "#0072B2", "#D55E00", "#CC79A7")#
 
-## Eq. 21 (Supplementary Information)
 #' Equilibrium density of species i without dispersal.
 #'
 #' @param a Interspecific competition coefficient.
@@ -33,7 +34,6 @@ get_N0i <- function(a=0.5, n=10, r=1, ri=0.1){
   (a*(n - 1)*r - ri*(a*(n - 2) + 1))/((a - 1)*(a*(n - 1) + 1))
 }
 
-## Eq. 22 (Supplementary Information)
 #' Total equilibrium abundance without dispersal.
 #'
 #' @param meanA Mean interspecific interaction strength.
@@ -46,7 +46,6 @@ get_N_total <- function(meanA=0.2, d=1, n=10, r=1){
   n*r/(d+meanA*(n-1))
 }
 
-## Eq. 7 (Main Text)
 #' Density contribution of unit dispersal for excluded species.
 #'
 #' @param NTotalK Total abundance across other patches.
@@ -59,7 +58,6 @@ get_N1iExc <- function(NTotalK=10, ri=1, a=0.5, SumN0j){
   NTotalK/(a*SumN0j - ri)
 }
 
-## Eq. 29 (Supplementary Information)
 #' Density contribution of unit dispersal for persisting species.
 #'
 #' @param a Interaction strength.
@@ -76,7 +74,6 @@ get_N1iPer <- function(a=0.5, n=4, m=1, meanrho, rhoi, p, meanN1Exc){
     ((1-a)*(a*(m-1)+1))
 }
 
-## Eq. 14 (Supplementary Information)
 #' Fraction of patches with m species (no dispersal).
 #'
 #' @param meanA Interaction strength.
@@ -94,7 +91,6 @@ get_fraction_m <- function(meanA=0.5, m=2, n=3, ...){
   ifelse(m==1, NA, choose(n, m) * feas1combo)
 }
 
-## Application of Eq. 14 
 #' Distribution of species richness across patches.
 #'
 #' @param n Number of species.
@@ -133,7 +129,6 @@ get_mean_trunc <- function(pdfFitted, q=0.5, ditch="up"){
   sum(pdfTrunc$x*pdfTrunc$y)/sum(pdfTrunc$y)
 }
 
-## Eq. 25 (Supplementary Information)
 #' Mean intrinsic growth rate given local richness.
 #'
 #' @param a Interaction strength.
