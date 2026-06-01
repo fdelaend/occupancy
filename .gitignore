@@ -10,6 +10,7 @@
 /simulated-data/
 /paper_from_overleaf/*.*
 /paper_from_overleaf/zenodo/*.*
+/zenodo/*.*
 
 !/simulated-data/.gitkeep
 
