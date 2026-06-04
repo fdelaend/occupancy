@@ -193,8 +193,7 @@ ggplot(prob_df,
   ) +
   labs(
     x = "Spring presence (0/1)",
-    y = "P(Summer alone = 1)",
-    title = "Probability of summer-alone occurrence conditional on spring occurrence"
+    y = "P(Summer alone = 1)"
   ) +
   theme_classic()
 
