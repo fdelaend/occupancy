@@ -144,9 +144,66 @@ data_priority <- daphnids_des |>
   mutate(island = as.factor(island),
          year = as.factor(year))
 
-all_species <- c("magna", "longispina", "pulex")
+### Plot for talk ------
+# Select the relevant columns
+species_df <- data_priority %>%
+  select(
+    magna_spring, magna_summer_alone,
+    longispina_spring, longispina_summer_alone,
+    pulex_spring, pulex_summer_alone
+  )
+
+# Convert to long format
+long_df <- bind_rows(
+  tibble(
+    species = "magna",
+    spring = data_priority$magna_spring,
+    summer_alone = data_priority$magna_summer_alone
+  ),
+  tibble(
+    species = "longispina",
+    spring = data_priority$longispina_spring,
+    summer_alone = data_priority$longispina_summer_alone
+  ),
+  tibble(
+    species = "pulex",
+    spring = data_priority$pulex_spring,
+    summer_alone = data_priority$pulex_summer_alone
+  )
+)
+
+# Calculate P(summer_alone = 1 | spring)
+prob_df <- long_df %>%
+  group_by(species, spring) %>%
+  summarise(
+    prob = mean(summer_alone == 1, na.rm = TRUE),
+    n = n(),
+    .groups = "drop"
+  )
+
+# Plot
+ggplot(prob_df,
+       aes(x = factor(spring),
+           y = prob)) +
+  geom_col(width = 0.7) +
+  facet_wrap(~ species) +
+  scale_y_continuous(
+    limits = c(0, 1),
+    labels = scales::percent
+  ) +
+  labs(
+    x = "Spring presence (0/1)",
+    y = "P(Summer alone = 1)",
+    title = "Probability of summer-alone occurrence conditional on spring occurrence"
+  ) +
+  theme_classic()
+
+ggsave(filename = "../figures/priority-talk.pdf", 
+       width=5, height = 3, device = "pdf")
 
 ### Model fitting --------
+all_species <- c("magna", "longispina", "pulex")
+
 models_priority <- tibble(focal = all_species) |>
   mutate(model = map(focal, 
                      ~ fit_priority(focal = .x, adapt_delta = 0.999,
