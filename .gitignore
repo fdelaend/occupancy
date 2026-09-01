@@ -4,6 +4,7 @@
 
 # Folders to ignore
 /data/
+/stat-models-data/*.*
 /simulated-data/
 /paper_from_overleaf/*.*
 /paper_from_overleaf/zenodo/*.*
