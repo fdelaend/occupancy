@@ -32,7 +32,7 @@ Sims_plot <- Sims |>
   summarise(mean = mean(value),
             sd = sd(value),
             .by = c(sp, d, meanA))
-
+# Fig S4 plotting ------
 ggplot(Sims_plot) + 
   aes(x = d, y = mean, col = factor(sp)) + 
   theme_bw() +
@@ -45,6 +45,6 @@ ggplot(Sims_plot) +
        col = "species") + 
   geom_vline(xintercept = 0.005, lty = "dashed")
 
-ggsave(paste0("../figures/d.pdf"), width=5, height = 5, device = "pdf")  
+ggsave(paste0("../figures/FigS4.pdf"), width=5, height = 5, device = "pdf")  
   
   

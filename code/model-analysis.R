@@ -1,22 +1,26 @@
 
 source("tools-simulations.R")
 source("tools-other.R")
+# Compile all simulation output from cluster into a single object ---------
+# or load the compiled data if it already exists
+output_file <- "../simulated-data/simulated-data/all-data.RDS"
 
-# Combine all simulation output from cluster into a single object ----
-Sims <- tibble(filenr = c(1:100)) |>
-  mutate(data = map(filenr, ~read_rds(paste("../simulated-data/simulated-data/",.x,"data.rds", sep="")))) |>
-  unnest(data) |>
-  select(!filenr) |>
-  mutate(rep = as.numeric(rep))
-# Save the object
-saveRDS(Sims, file=paste("../simulated-data/simulated-data/all-data.RDS",sep=""))
+if (file.exists(output_file)) {
+  Sims <- readRDS(file=output_file)
+} else {
+  Sims <- tibble(filenr = c(1:100)) |>
+    mutate(data = map(filenr, ~read_rds(paste("../simulated-data/simulated-data/",.x,"data.rds", sep="")))) |>
+    unnest(data) |>
+    select(!filenr) |>
+    mutate(rep = as.numeric(rep))
 
-# Or read it if already done ----
-Sims <- readRDS(file="../simulated-data/simulated-data/all-data.RDS")
+  # Save the object
+  saveRDS(Sims, file=output_file)
+  }
 
 # Recover the distribution of the growth rates --------
 Rs     <- Sims |> 
-  #Only keep a factorial combo, since the same Rs are being sampled everywhere
+  #Only keep a single combination, since the same Rs are being sampled everywhere
   filter(meanA==0.5, d==min(d), vary==0, k==1, cvA==1e-2, p==50, 
          rep==1) |> 
   select(R) |>
@@ -26,22 +30,26 @@ meanR  <- sum(pdfRs$x*pdfRs$y)/sum(pdfRs$y)#grant mean of R
 
 
 # Predict f(m) (eq.14 in SI) for diffuse competition ----
-Predictions_fm <- expand_grid(n = 10, m = c(1:10), 
-                               iteration = c(1:10),
-                               meanA = seq(0.1, 0.8, 0.05)) |>
-  mutate(meanA = if_else(meanA==1, meanA+1e-5, meanA)) |> #Avoid matrices with det()=0
-  (\(x) mutate(x, fmPredicted = pmap_dbl(x, get_fraction_m)))() |>
-  #fm isn't calculated correctly for m = 1, so get it here as 1 - sum of fm for 2 to 6
-  mutate(fmPredicted = if_else(m==1, abs(1-sum(fmPredicted, na.rm=T)), fmPredicted),
-         .by = c(n, meanA, iteration))  |>
-  summarise(fmPredicted = mean(fmPredicted), 
-            .by = c(n, m, meanA))
-# Save the object
-saveRDS(Predictions_fm, file=paste("../simulated-data/simulated-data/Predictions_fm.RDS",sep=""))
+# or load if it already exists
+output_file <- "../simulated-data/simulated-data/Predictions_fm.RDS"
 
-# Or read it if already done ----
-Predictions_fm <- readRDS(file="../simulated-data/simulated-data/Predictions_fm.RDS")
-  
+if (file.exists(output_file)) {
+  Predictions_fm <- readRDS(file=output_file)
+} else {
+  Predictions_fm <- expand_grid(n = 10, m = c(1:10), 
+                                iteration = c(1:10),
+                                meanA = seq(0.1, 0.8, 0.05)) |>
+    mutate(meanA = if_else(meanA==1, meanA+1e-5, meanA)) |> #Avoid matrices with det()=0
+    (\(x) mutate(x, fmPredicted = pmap_dbl(x, get_fraction_m)))() |>
+    #fm isn't calculated correctly for m = 1, so get it here as 1 - sum of fm for 2 to 6
+    mutate(fmPredicted = if_else(m==1, abs(1-sum(fmPredicted, na.rm=T)), fmPredicted),
+           .by = c(n, meanA, iteration))  |>
+    summarise(fmPredicted = mean(fmPredicted), 
+              .by = c(n, m, meanA))
+  # Save the object
+  saveRDS(Predictions_fm, file=output_file)
+}
+
 # Predict regional total of density of a species (eq.13 in SI) for diffuse competition ----
 Predictions_NK <- Predictions_fm |> 
   # Predict, for each level of local richness m: 
@@ -71,29 +79,33 @@ NtotalK <- ggplot(Predictions_NK |>
   theme(legend.position="bottom")
 
 # Predict probability to persist when excluded w/o dispersal -----
-Predictions <- Predictions_NK |>
-  filter(meanA > 0) |> #Otherwise error when computing sample_ri
-  nest_by(n, meanA, p, NTotalKPredicted) |>
-  ungroup() |>
-  mutate(sampleSize = 100) |> #set sample size for probability calculations. 
-  (\(x) mutate(x, samples = pmap(x, sample_random)))() |>
-  mutate(samples = map(samples, ~ .x |>  
-                       mutate(meanN1Exc=mean(N1iExc, na.rm=T), #mean across patches of Ni1 in case of exclusion w/o dispersal. Because we sample 1 species per patch, this is the same as taking a mean across species
-                              meanrho = mean(rhoi, na.rm=T), #same type of mean, but now of rhoi
-                              .by = m))) |>  
-  expand_grid(d = seq(-6,-2, length.out=20)) |> #Create a gradient of dispersal values. 
-  mutate(d=10^d) |>
-  (\(x) mutate(x, samples = pmap(x, sample_random_Ni)))() |> #Sample random values for Ni (density of i with dispersal)
-  mutate(probExc = map_dbl(samples, ~sum(.x$NiExc>extinctionThreshold)/length(.x$NiExc)), #Compute probabilities that > threshold
-         probPer = map_dbl(samples, ~sum(.x$NiPer>extinctionThreshold)/length(.x$NiPer))) |>
-  (\(x) mutate(x, A = pmap(x, make_A)))() |>
-  mutate(Xi = map_dbl(A, ~feasibility(.x))) |>
-  (\(x) mutate(x, prob2 = pmap_dbl(x, get_patch_occupancy)))() |>
-  select(!data & !A)
+# or load if it already exists
+output_file <- "../simulated-data/simulated-data/Predictions.RDS"
 
-saveRDS(Predictions, file="../simulated-data/simulated-data/Predictions.RDS")
-#Or read it if already done ----
-Predictions <- readRDS(file="../simulated-data/simulated-data/Predictions.RDS")
+if (file.exists(output_file)) {
+  Predictions <- readRDS(file=output_file)
+} else {
+  Predictions <- Predictions_NK |>
+    filter(meanA > 0) |> #Otherwise error when computing sample_ri
+    nest_by(n, meanA, p, NTotalKPredicted) |>
+    ungroup() |>
+    mutate(sampleSize = 100) |> #set sample size for probability calculations. 
+    (\(x) mutate(x, samples = pmap(x, sample_random)))() |>
+    mutate(samples = map(samples, ~ .x |>  
+                           mutate(meanN1Exc=mean(N1iExc, na.rm=T), #mean across patches of Ni1 in case of exclusion w/o dispersal. Because we sample 1 species per patch, this is the same as taking a mean across species
+                                  meanrho = mean(rhoi, na.rm=T), #same type of mean, but now of rhoi
+                                  .by = m))) |>  
+    expand_grid(d = seq(-6,-2, length.out=20)) |> #Create a gradient of dispersal values. 
+    mutate(d=10^d) |>
+    (\(x) mutate(x, samples = pmap(x, sample_random_Ni)))() |> #Sample random values for Ni (density of i with dispersal)
+    mutate(probExc = map_dbl(samples, ~sum(.x$NiExc>extinctionThreshold)/length(.x$NiExc)), #Compute probabilities that > threshold
+           probPer = map_dbl(samples, ~sum(.x$NiPer>extinctionThreshold)/length(.x$NiPer))) |>
+    (\(x) mutate(x, A = pmap(x, make_A)))() |>
+    mutate(Xi = map_dbl(A, ~feasibility(.x))) |>
+    (\(x) mutate(x, prob2 = pmap_dbl(x, get_patch_occupancy)))() |>
+    select(!data & !A)
+  saveRDS(Predictions, file=output_file)
+}
 
 # Plot this probability ----
 probExc <- ggplot(Predictions |> 
@@ -129,10 +141,10 @@ NegIGR <- Predictions_IGR |>
        y="probability density", col="a") +
   theme(legend.position="bottom")
 
-# Fig 1 ----
-case1 <- (NtotalK | NegIGR) / probExc + plot_annotation(tag_levels = "A") 
+# Fig 2 ----
+Fig2 <- (NtotalK | NegIGR) / probExc + plot_annotation(tag_levels = "A") 
 
-ggsave(paste0("../figures/case1.pdf"), case1, 
+ggsave(paste0("../figures/Fig2.pdf"), Fig2, 
        width=4.2, height = 6.3, device = "pdf")  
 
 # Evidence that persistence with disperal is almost guaranteed ----
@@ -153,7 +165,7 @@ probPer <- ggplot(Predictions |>
              labeller = label_bquote(cols=paste("a = ",.(meanA)))) +
   theme(legend.position="bottom")
 
-ggsave(paste0("../figures/case2.pdf"), probPer, 
+ggsave(paste0("../figures/FigS3.pdf"), probPer, 
        width=4, height = 3, device = "pdf")  
 
 # Summarize simulated data to add to predictions -----
@@ -165,8 +177,8 @@ SimsSum <- Sims |>
             .by = c(n, meanA, d, vary, k, cvA, p, dispType)) |>
   mutate(k = if_else(k==1, "Equivalence", "Inequivalence"))
 
-#Fig 2: Plot for when all assumptions are met -----
-ggplot(SimsSum |>
+#Fig3A: Plot for when all assumptions are met -----
+Fig3A <- ggplot(SimsSum |>
          filter(dispType == "regularD", meanA < 1, 
                 d < 1e-2, 
                 k=="Equivalence", cvA==0.01, vary==0)) + 
@@ -183,11 +195,9 @@ ggplot(SimsSum |>
   labs(x=expression(paste("dispersal rate, log"[10],"(d)")), 
        y="nr. of patches, p", fill="patch occupancy")
 
-ggsave(paste0("../figures/patch-occupancy-met.pdf"), 
-       width=6, height = 3, device = "pdf")  
 
-#Fig 3: Plot for when assumptions are not met ------
-ggplot(SimsSum |> filter(dispType == "exponentialD", 
+#Fig 3B: Plot for when assumptions are not met ------
+Fig3B <- ggplot(SimsSum |> filter(dispType == "exponentialD", 
                          vary > 0, cvA == 0.2)) + 
   theme_bw() +
   theme(panel.grid = element_blank(), 
@@ -201,8 +211,14 @@ ggplot(SimsSum |> filter(dispType == "exponentialD",
   labs(x = expression(paste("dispersal rate, log"[10],"(d)")), 
        y = "nr of patches, p", fill= "patch occupancy")
 
-ggsave(paste0("../figures/patch-occupancy-not-met.pdf"), 
-       width=6.5, height = 4.5, device = "pdf")  
+#Fig3 ---------
+Fig3 <- Fig3A / Fig3B +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "bottom") &
+  plot_annotation(tag_levels = "A")
+
+ggsave(paste0("../figures/Fig3.pdf"), 
+       width=5, height = 6.5, device = "pdf")  
 
 # Showcase accuracy of mean r -----
 Mean_predictions <- Predictions_NK |>
@@ -227,5 +243,5 @@ Sims |>
        y = "mean growth rate", 
        col = "a")
 
-ggsave(paste0("../figures/rm.pdf"), width=4, height = 3, 
+ggsave(paste0("../figures/FigS2.pdf"), width=4, height = 3, 
        device = "pdf")

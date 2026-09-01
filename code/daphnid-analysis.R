@@ -29,7 +29,7 @@ pool_coords <- read_csv("../daphnid-data/pool-coords.csv") |>
   # unnest
   unnest(data)
 
-## Plot of pool locations ------
+## Plot of pool locations: Fig S1 ------
 pool_map <- pool_coords %>%
   st_as_sf(coords = c("longitude_corr", "latitude_corr"), crs = 4326) %>%
   mutate(cluster = factor(cluster))
@@ -41,7 +41,7 @@ finland <- ne_countries(country = "Finland", scale = "medium", returnclass = "sf
 pool_map_proj <- st_transform(pool_map, 3067)
 finland_proj <- st_transform(finland, 3067)
 
-# Main map extent: buffer around your points
+# Main map extent: buffer around points
 bbox <- st_bbox(
   st_buffer(st_union(pool_map_proj), dist = 200)   # buffer in meters
 )
@@ -76,7 +76,7 @@ ggdraw(main_map) +
   draw_plot(inset_map, 
             x = 0.5, y = 0.15, width = 0.28, height = 0.2)
 
-ggsave(filename = "../figures/map.pdf", 
+ggsave(filename = "../figures/FigS1.pdf", 
        width=5, height = 6, device = "pdf")
 
 ## Daphnid data -------
@@ -144,77 +144,23 @@ data_priority <- daphnids_des |>
   mutate(island = as.factor(island),
          year = as.factor(year))
 
-### Plot for talk ------
-# Select the relevant columns
-species_df <- data_priority %>%
-  select(
-    magna_spring, magna_summer_alone,
-    longispina_spring, longispina_summer_alone,
-    pulex_spring, pulex_summer_alone
-  )
-
-# Convert to long format
-long_df <- bind_rows(
-  tibble(
-    species = "magna",
-    spring = data_priority$magna_spring,
-    summer_alone = data_priority$magna_summer_alone
-  ),
-  tibble(
-    species = "longispina",
-    spring = data_priority$longispina_spring,
-    summer_alone = data_priority$longispina_summer_alone
-  ),
-  tibble(
-    species = "pulex",
-    spring = data_priority$pulex_spring,
-    summer_alone = data_priority$pulex_summer_alone
-  )
-)
-
-# Calculate P(summer_alone = 1 | spring)
-prob_df <- long_df %>%
-  group_by(species, spring) %>%
-  summarise(
-    prob = mean(summer_alone == 1, na.rm = TRUE),
-    n = n(),
-    .groups = "drop"
-  )
-
-# Plot
-ggplot(prob_df,
-       aes(x = factor(spring),
-           y = prob)) +
-  geom_col(width = 0.7) +
-  facet_wrap(~ species) +
-  scale_y_continuous(
-    limits = c(0, 1),
-    labels = scales::percent
-  ) +
-  labs(
-    x = "Spring presence (0/1)",
-    y = "P(Summer alone = 1)"
-  ) +
-  theme_classic()
-
-ggsave(filename = "../figures/priority-talk.pdf", 
-       width=5, height = 3, device = "pdf")
-
-### Model fitting --------
+### Load or re-fit models ---------------
 all_species <- c("magna", "longispina", "pulex")
-
-models_priority <- tibble(focal = all_species) |>
-  mutate(model = map(focal, 
-                     ~ fit_priority(focal = .x, adapt_delta = 0.999,
+output_file <- "../stat-models-data/models_priority.RDS"
+if (file.exists(output_file)) {
+  models_priority <- readRDS(output_file)
+} else {
+  models_priority <- tibble(focal = all_species) |>
+    mutate(model = map(focal, 
+                       ~ fit_priority(focal = .x, adapt_delta = 0.999,
                                       data = data_priority))) 
+  saveRDS(models_priority, output_file)
+}
 
-saveRDS(models_priority, "../data/models_priority.RDS")
-models_priority <- readRDS("../data/models_priority.RDS")
-
-### Model plotting --------
+### Model plotting: Fig 4 --------
 # get out the typical names of the parameters we want to plot
 colnames(as.matrix(models_priority$model[[1]]))
-# do the plotting: Fig 4
+# do the plotting
 models_priority |>
   mutate(draws = map(model, ~as_draws_df(.x) |>
                        select(1:5) |>
@@ -234,13 +180,10 @@ models_priority |>
   labs(x = "parameter value", y= "focal species") +
   theme_bw()
   
-ggsave(filename = "../figures/priority.pdf", 
+ggsave(filename = "../figures/Fig4.pdf", 
        width=5, height = 3, device = "pdf")
-#comparison w out of the box solution
-#mcmc_areas(models_priority$model[[3]], 
-#           pars = colnames(as.matrix(models_priority$model[[3]]))[1:5])
 
-### Model checking --------
+### Model checking: Fig S5 --------
 test <- models_priority |>
   mutate(ppc_draws = map(model, ~posterior_predict(.x)))
 
@@ -256,32 +199,35 @@ p3 <- ppc_dens_overlay(y = data_priority$pulex_summer_alone,
 
 (p1 | p2 | p3) 
 
-ggsave("../figures/check_priority.pdf",
+ggsave("../figures/FigS5.pdf",
        width=8, height = 3, device = "pdf")                 
 
 ### Model printing -----
 print_model(models_priority, focal)
                                
 ## Proportion of pairs -----
-### Model fitting ------
-models_prop <- daphnids_des |>
-  group_by(sample, b) |>
-  nest() |>
-  mutate(model = map(data, ~ brm(pairs ~ nr_pools_within + desiccation_dynamic +
-                                      (1|island/pool) + (1|year), data = .x, 
-                                 family = brms::bernoulli(),
-                                 control = list(adapt_delta = 0.999),
-                                 warmup = 6000,
-                                 iter = 8000)))
-
-saveRDS(models_prop, "../data/models_prop.RDS")
-models_prop <- readRDS("../data/models_prop.RDS")
+### Load or re-fit models ------
+output_file <- "../stat-models-data/models_prop.RDS"
+if (file.exists(output_file)) {
+  models_prop <- readRDS("../stat-models-data/models_prop.RDS")
+} else {
+  models_prop <- daphnids_des |>
+    group_by(sample, b) |>
+    nest() |>
+    mutate(model = map(data, ~ brm(pairs ~ nr_pools_within + desiccation_dynamic +
+                                     (1|island/pool) + (1|year), data = .x, 
+                                   family = brms::bernoulli(),
+                                   control = list(adapt_delta = 0.999),
+                                   warmup = 6000,
+                                   iter = 8000)))
+  saveRDS(models_prop, output_file)
+}
 
 ### Model plotting --------
-#### Posteriors -------
+#### Posteriors: Fig 5 -------
 # get out the typical names of the parameters we want to plot
 colnames(as.matrix(models_prop$model[[1]]))
-# do the plotting: Fig 5
+# do the plotting
 models_prop |>
   mutate(draws = map(model, ~as_draws_df(.x) |>
                        select(1:6) |>
@@ -304,7 +250,7 @@ models_prop |>
   labs(y = "distance (m)", x = "parameter value") +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
 
-ggsave(filename = "../figures/proportion.pdf", 
+ggsave(filename = "../figures/Fig5.pdf", 
        width=12, height = 3, device = "pdf")
 
 #### Fixed effect: Fig 6 -------
@@ -349,10 +295,10 @@ ggplot(test, aes(x = nr_pools_within, y = p_mean, col = as.factor(b))) +
        col = "distance (m)") +
   theme_bw()
 
-ggsave(filename = "../figures/proportion_nearby.pdf", 
+ggsave(filename = "../figures/Fig6.pdf", 
        width=6, height = 3, device = "pdf")
 
-### Model checking --------
+### Model checking: Fig S6 --------
 test <- models_prop |>
   mutate(ppc_draws = map(model, ~posterior_predict(.x)))
 
@@ -369,7 +315,7 @@ for (b in c(50, 100)){
 
 (b50spring | b50summer)/(b100spring | b100summer) 
 
-ggsave("../figures/check_prop.pdf",
+ggsave("../figures/FigS6.pdf",
        width=6, height = 5, device = "pdf")        
 
 ### Model printing -------------

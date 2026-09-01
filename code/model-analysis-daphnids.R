@@ -1,17 +1,20 @@
 
 source("tools-simulations.R")
 source("tools-other.R")
+# Compile all simulation output from cluster into a single object ---------
+# or load the compiled data if it already exists
+output_file <- "../simulated-data/simulated-data-daphnids/all-data.RDS"
 
-# Combine all simulation output from cluster into a single object ----
-Sims <- tibble(filenr = c(1:100)) |>
-  mutate(data = map(filenr, ~read_rds(paste("../simulated-data/simulated-data-daphnids/",.x,"data.rds", sep="")))) |>
-  unnest(data) |>
-  select(!filenr) |>
-  mutate(rep = as.numeric(rep))
-# Save the object
-saveRDS(Sims, file=paste("../simulated-data/simulated-data-daphnids/all-data.RDS",sep=""))
-# Or read it if already done ----
-Sims <- readRDS(file="../simulated-data/simulated-data-daphnids/all-data.RDS")
+if (file.exists(output_file)) {
+  Sims <- readRDS(file=output_file)
+} else {
+  Sims <- tibble(filenr = c(1:100)) |>
+    mutate(data = map(filenr, ~read_rds(paste("../simulated-data/simulated-data-daphnids/",.x,"data.rds", sep="")))) |>
+    unnest(data) |>
+    select(!filenr) |>
+    mutate(rep = as.numeric(rep))
+  saveRDS(Sims, file=output_file)
+}
 
 # Summarize simulated data -----
 SimsSum <- Sims |> 
@@ -45,7 +48,7 @@ ggplot(SimsSum_realistic |>
   labs(col=expression(paste(bar(a))), 
        x="nr. of patches, p", y="patch occupancy of pairs when n=3")
 
-ggsave(paste0("../figures/patch-occupancy-daphnids.pdf"), 
+ggsave(paste0("../figures/Fig7.pdf"), 
        width=6, height = 6, device = "pdf")  
 
 #Fig 8: Plot vs. d -----
@@ -63,5 +66,5 @@ ggplot(SimsSum_realistic |>
        x=expression(paste("dispersal rate, log"[10],"(d)")), 
        y="patch occupancy of pairs when n=3")
 
-ggsave(paste0("../figures/patch-occupancy-daphnids-d.pdf"), 
+ggsave(paste0("../figures/Fig8.pdf"), 
        width=6, height = 6, device = "pdf")  
